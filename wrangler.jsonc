@@ -1,0 +1,28 @@
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "wealthscope",
+	"main": ".svelte-kit/cloudflare/_worker.js",
+	"compatibility_date": "2025-08-01",
+	// nodejs_compat is required by @neondatabase/serverless (node:events, node:buffer)
+	// and by pdf-lib's use of node:buffer during report generation.
+	"compatibility_flags": ["nodejs_compat"],
+	"assets": {
+		"binding": "ASSETS",
+		"directory": ".svelte-kit/cloudflare"
+	},
+	"observability": {
+		"enabled": true
+	},
+	"vars": {
+		"PUBLIC_APP_NAME": "WealthScope",
+		"PUBLIC_DEFAULT_LOCALE": "th-TH",
+		"PUBLIC_DEFAULT_CURRENCY": "THB"
+	},
+	"placement": {
+		// Run the Worker near the Neon Singapore region rather than near the visitor,
+		// because every protected page makes several round trips to Postgres.
+		"mode": "smart"
+	}
+	// Secrets (never committed): DATABASE_URL, BETTER_AUTH_SECRET, BETTER_AUTH_URL
+	// Set them with: wrangler secret put DATABASE_URL
+}

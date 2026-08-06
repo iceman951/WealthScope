@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<link rel="icon" href="%sveltekit.assets%/favicon.svg" type="image/svg+xml" />
+		<link rel="preconnect" href="https://fonts.googleapis.com" />
+		<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+		<link
+			rel="stylesheet"
+			href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;800&display=swap"
+		/>
+		<script>
+			// Applied before first paint so a dark-mode user never sees a light flash.
+			// Mirrors the Appearance preference persisted by the settings screen.
+			try {
+				const stored = localStorage.getItem('ws.theme');
+				const system = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+				document.documentElement.dataset.theme =
+					stored === 'dark' || stored === 'light' ? stored : system;
+			} catch {
+				/* storage unavailable — keep the light default */
+			}
+		</script>
+		%sveltekit.head%
+	</head>
+	<body data-sveltekit-preload-data="hover">
+		<div style="display: contents">%sveltekit.body%</div>
+	</body>
+</html>

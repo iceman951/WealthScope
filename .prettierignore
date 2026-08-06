@@ -1,0 +1,7 @@
+.svelte-kit
+.wrangler
+build
+dist
+drizzle
+node_modules
+pnpm-lock.yaml
