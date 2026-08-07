@@ -1,5 +1,5 @@
 {
-  "id": "34f75353-337e-4de6-a4bd-f8df41185d7a",
+  "id": "5a52dd0c-89e1-4fcd-979d-f47e397f8da5",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -504,7 +504,7 @@
       "checkConstraints": {
         "asset_prices_source_chk": {
           "name": "asset_prices_source_chk",
-          "value": "\"source\" IN ($1, $2, $3)"
+          "value": "\"source\" IN ('manual', 'import', 'provider')"
         },
         "asset_prices_currency_chk": {
           "name": "asset_prices_currency_chk",
@@ -755,7 +755,7 @@
       "checkConstraints": {
         "assets_type_chk": {
           "name": "assets_type_chk",
-          "value": "\"asset_type\" IN ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)"
+          "value": "\"asset_type\" IN ('cash', 'stock', 'etf', 'bond', 'fund', 'crypto', 'property', 'vehicle', 'business', 'collectible', 'other')"
         },
         "assets_currency_chk": {
           "name": "assets_currency_chk",
@@ -960,15 +960,15 @@
       "checkConstraints": {
         "cashflow_entry_type_chk": {
           "name": "cashflow_entry_type_chk",
-          "value": "\"entry_type\" IN ($1, $2)"
+          "value": "\"entry_type\" IN ('income', 'expense')"
         },
         "cashflow_category_chk": {
           "name": "cashflow_category_chk",
-          "value": "\"category\" IN ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)"
+          "value": "\"category\" IN ('salary', 'business', 'rental', 'dividends', 'interest', 'pension', 'other_income', 'housing', 'living', 'taxes', 'education', 'transport', 'insurance', 'fees', 'debt_service', 'other_expense')"
         },
         "cashflow_frequency_chk": {
           "name": "cashflow_frequency_chk",
-          "value": "\"frequency\" IN ($1, $2, $3, $4, $5, $6, $7)"
+          "value": "\"frequency\" IN ('once', 'weekly', 'biweekly', 'monthly', 'quarterly', 'semiannual', 'annual')"
         },
         "cashflow_currency_chk": {
           "name": "cashflow_currency_chk",
@@ -1256,7 +1256,7 @@
       "checkConstraints": {
         "financial_accounts_type_chk": {
           "name": "financial_accounts_type_chk",
-          "value": "\"account_type\" IN ($1, $2, $3, $4, $5, $6, $7, $8, $9)"
+          "value": "\"account_type\" IN ('cash', 'bank', 'brokerage', 'retirement', 'crypto', 'property', 'loan', 'credit', 'other')"
         },
         "financial_accounts_currency_chk": {
           "name": "financial_accounts_currency_chk",
@@ -1434,15 +1434,15 @@
       "checkConstraints": {
         "financial_goals_type_chk": {
           "name": "financial_goals_type_chk",
-          "value": "\"goal_type\" IN ($1, $2, $3, $4, $5, $6, $7)"
+          "value": "\"goal_type\" IN ('emergency_fund', 'retirement', 'property', 'education', 'debt_payoff', 'travel', 'other')"
         },
         "financial_goals_status_chk": {
           "name": "financial_goals_status_chk",
-          "value": "\"status\" IN ($1, $2, $3, $4)"
+          "value": "\"status\" IN ('active', 'achieved', 'paused', 'abandoned')"
         },
         "financial_goals_priority_chk": {
           "name": "financial_goals_priority_chk",
-          "value": "\"priority\" IN ($1, $2, $3)"
+          "value": "\"priority\" IN ('low', 'medium', 'high')"
         },
         "financial_goals_currency_chk": {
           "name": "financial_goals_currency_chk",
@@ -1597,11 +1597,11 @@
       "checkConstraints": {
         "import_batches_kind_chk": {
           "name": "import_batches_kind_chk",
-          "value": "\"kind\" IN ($1, $2, $3, $4)"
+          "value": "\"kind\" IN ('assets', 'transactions', 'liabilities', 'cashflow')"
         },
         "import_batches_status_chk": {
           "name": "import_batches_status_chk",
-          "value": "\"status\" IN ($1, $2, $3)"
+          "value": "\"status\" IN ('pending', 'completed', 'failed')"
         }
       },
       "isRLSEnabled": false
@@ -1833,7 +1833,7 @@
       "checkConstraints": {
         "liabilities_type_chk": {
           "name": "liabilities_type_chk",
-          "value": "\"liability_type\" IN ($1, $2, $3, $4, $5, $6, $7, $8)"
+          "value": "\"liability_type\" IN ('mortgage', 'auto_loan', 'student_loan', 'personal_loan', 'credit_card', 'line_of_credit', 'business_loan', 'other')"
         },
         "liabilities_currency_chk": {
           "name": "liabilities_currency_chk",
@@ -2273,7 +2273,7 @@
       "checkConstraints": {
         "transactions_type_chk": {
           "name": "transactions_type_chk",
-          "value": "\"transaction_type\" IN ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)"
+          "value": "\"transaction_type\" IN ('buy', 'sell', 'deposit', 'withdrawal', 'dividend', 'interest', 'fee', 'tax', 'transfer', 'adjustment')"
         },
         "transactions_currency_chk": {
           "name": "transactions_currency_chk",

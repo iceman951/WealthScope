@@ -54,7 +54,7 @@ CREATE TABLE "asset_prices" (
 	"price_date" date NOT NULL,
 	"source" text DEFAULT 'manual' NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
-	CONSTRAINT "asset_prices_source_chk" CHECK ("source" IN ($1, $2, $3)),
+	CONSTRAINT "asset_prices_source_chk" CHECK ("source" IN ('manual', 'import', 'provider')),
 	CONSTRAINT "asset_prices_currency_chk" CHECK ("currency" ~ '^[A-Z]{3}$'),
 	CONSTRAINT "asset_prices_price_chk" CHECK ("price" >= 0)
 );
@@ -75,7 +75,7 @@ CREATE TABLE "assets" (
 	"notes" text,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
-	CONSTRAINT "assets_type_chk" CHECK ("asset_type" IN ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)),
+	CONSTRAINT "assets_type_chk" CHECK ("asset_type" IN ('cash', 'stock', 'etf', 'bond', 'fund', 'crypto', 'property', 'vehicle', 'business', 'collectible', 'other')),
 	CONSTRAINT "assets_currency_chk" CHECK ("currency" ~ '^[A-Z]{3}$'),
 	CONSTRAINT "assets_quantity_chk" CHECK ("quantity" >= 0),
 	CONSTRAINT "assets_unit_price_chk" CHECK ("unit_price" >= 0)
@@ -96,9 +96,9 @@ CREATE TABLE "cashflow_entries" (
 	"notes" text,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
-	CONSTRAINT "cashflow_entry_type_chk" CHECK ("entry_type" IN ($1, $2)),
-	CONSTRAINT "cashflow_category_chk" CHECK ("category" IN ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)),
-	CONSTRAINT "cashflow_frequency_chk" CHECK ("frequency" IN ($1, $2, $3, $4, $5, $6, $7)),
+	CONSTRAINT "cashflow_entry_type_chk" CHECK ("entry_type" IN ('income', 'expense')),
+	CONSTRAINT "cashflow_category_chk" CHECK ("category" IN ('salary', 'business', 'rental', 'dividends', 'interest', 'pension', 'other_income', 'housing', 'living', 'taxes', 'education', 'transport', 'insurance', 'fees', 'debt_service', 'other_expense')),
+	CONSTRAINT "cashflow_frequency_chk" CHECK ("frequency" IN ('once', 'weekly', 'biweekly', 'monthly', 'quarterly', 'semiannual', 'annual')),
 	CONSTRAINT "cashflow_currency_chk" CHECK ("currency" ~ '^[A-Z]{3}$'),
 	CONSTRAINT "cashflow_amount_chk" CHECK ("amount" >= 0)
 );
@@ -127,7 +127,7 @@ CREATE TABLE "financial_accounts" (
 	"is_active" boolean DEFAULT true NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
-	CONSTRAINT "financial_accounts_type_chk" CHECK ("account_type" IN ($1, $2, $3, $4, $5, $6, $7, $8, $9)),
+	CONSTRAINT "financial_accounts_type_chk" CHECK ("account_type" IN ('cash', 'bank', 'brokerage', 'retirement', 'crypto', 'property', 'loan', 'credit', 'other')),
 	CONSTRAINT "financial_accounts_currency_chk" CHECK ("currency" ~ '^[A-Z]{3}$')
 );
 --> statement-breakpoint
@@ -145,9 +145,9 @@ CREATE TABLE "financial_goals" (
 	"notes" text,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
-	CONSTRAINT "financial_goals_type_chk" CHECK ("goal_type" IN ($1, $2, $3, $4, $5, $6, $7)),
-	CONSTRAINT "financial_goals_status_chk" CHECK ("status" IN ($1, $2, $3, $4)),
-	CONSTRAINT "financial_goals_priority_chk" CHECK ("priority" IN ($1, $2, $3)),
+	CONSTRAINT "financial_goals_type_chk" CHECK ("goal_type" IN ('emergency_fund', 'retirement', 'property', 'education', 'debt_payoff', 'travel', 'other')),
+	CONSTRAINT "financial_goals_status_chk" CHECK ("status" IN ('active', 'achieved', 'paused', 'abandoned')),
+	CONSTRAINT "financial_goals_priority_chk" CHECK ("priority" IN ('low', 'medium', 'high')),
 	CONSTRAINT "financial_goals_currency_chk" CHECK ("currency" ~ '^[A-Z]{3}$'),
 	CONSTRAINT "financial_goals_target_chk" CHECK (target_amount > 0)
 );
@@ -165,8 +165,8 @@ CREATE TABLE "import_batches" (
 	"status" text DEFAULT 'pending' NOT NULL,
 	"error_summary" text,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
-	CONSTRAINT "import_batches_kind_chk" CHECK ("kind" IN ($1, $2, $3, $4)),
-	CONSTRAINT "import_batches_status_chk" CHECK ("status" IN ($1, $2, $3))
+	CONSTRAINT "import_batches_kind_chk" CHECK ("kind" IN ('assets', 'transactions', 'liabilities', 'cashflow')),
+	CONSTRAINT "import_batches_status_chk" CHECK ("status" IN ('pending', 'completed', 'failed'))
 );
 --> statement-breakpoint
 CREATE TABLE "liabilities" (
@@ -186,7 +186,7 @@ CREATE TABLE "liabilities" (
 	"notes" text,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
-	CONSTRAINT "liabilities_type_chk" CHECK ("liability_type" IN ($1, $2, $3, $4, $5, $6, $7, $8)),
+	CONSTRAINT "liabilities_type_chk" CHECK ("liability_type" IN ('mortgage', 'auto_loan', 'student_loan', 'personal_loan', 'credit_card', 'line_of_credit', 'business_loan', 'other')),
 	CONSTRAINT "liabilities_currency_chk" CHECK ("currency" ~ '^[A-Z]{3}$'),
 	CONSTRAINT "liabilities_balance_chk" CHECK ("outstanding_balance" >= 0),
 	CONSTRAINT "liabilities_principal_chk" CHECK ("original_principal" >= 0),
@@ -226,7 +226,7 @@ CREATE TABLE "transactions" (
 	"import_batch_id" uuid,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
-	CONSTRAINT "transactions_type_chk" CHECK ("transaction_type" IN ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)),
+	CONSTRAINT "transactions_type_chk" CHECK ("transaction_type" IN ('buy', 'sell', 'deposit', 'withdrawal', 'dividend', 'interest', 'fee', 'tax', 'transfer', 'adjustment')),
 	CONSTRAINT "transactions_currency_chk" CHECK ("currency" ~ '^[A-Z]{3}$'),
 	CONSTRAINT "transactions_fee_chk" CHECK ("fee_amount" >= 0),
 	CONSTRAINT "transactions_tax_chk" CHECK ("tax_amount" >= 0)
