@@ -34,10 +34,18 @@ export const updatedAt = () =>
 		.defaultNow()
 		.$onUpdate(() => new Date());
 
-/** `col IN ('a','b',…)` for a text column standing in for an enum. */
+/**
+ * `col IN ('a','b',…)` for a text column standing in for an enum.
+ *
+ * The values are inlined as literals rather than bound parameters: a CHECK
+ * constraint is DDL, and PostgreSQL rejects placeholders there — drizzle-kit
+ * would otherwise emit `IN ($1, $2)` into the migration and the CREATE TABLE
+ * would fail. Values are compile-time domain constants; the quote doubling is
+ * belt and braces.
+ */
 export function oneOf(column: string, values: readonly string[]) {
 	const list = sql.join(
-		values.map((v) => sql`${v}`),
+		values.map((v) => sql.raw(`'${v.replace(/'/g, "''")}'`)),
 		sql`, `
 	);
 	return sql`${sql.identifier(column)} IN (${list})`;

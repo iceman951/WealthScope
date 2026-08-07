@@ -93,7 +93,7 @@ export function getAuth(): Auth {
 			'BETTER_AUTH_SECRET is not configured. Set it in .env locally, or as a Worker secret in production.'
 		);
 	}
-	const baseURL = env.BETTER_AUTH_URL ?? 'http://localhost:5173';
+	const baseURL = env.BETTER_AUTH_URL ?? 'http://localhost:5555';
 
 	if (!cached || cachedSecret !== secret) {
 		cached = buildAuth(secret, baseURL);
