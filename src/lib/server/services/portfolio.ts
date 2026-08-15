@@ -14,6 +14,7 @@ import { getSettings } from '../repositories/settings';
 import { listSnapshots, toEngineSnapshot } from '../repositories/snapshots';
 import { listTransactions, toEngineTransaction } from '../repositories/transactions';
 import type { PricePoint } from '$engine/types';
+import type { RateTable } from '$engine/currency';
 
 /**
  * The canonical portfolio calculation.
@@ -29,6 +30,12 @@ export interface PortfolioAnalysis {
 	/** Change in net worth across the recorded snapshots, for the dashboard delta. */
 	netWorthDelta: Decimal | null;
 	snapshots: { snapshotDate: string; netWorth: string }[];
+	/**
+	 * The rates the analysis ran against, so a caller computing something further
+	 * — realised gains from trade history, say — measures against the same table
+	 * rather than building a second one that could disagree.
+	 */
+	rates: RateTable;
 	asOf: string;
 }
 
@@ -75,6 +82,7 @@ export async function loadAnalysis(
 		settings,
 		netWorthDelta: netWorthDelta(snapshotRows.map(toEngineSnapshot)),
 		snapshots: snapshotRows.map((s) => ({ snapshotDate: s.snapshotDate, netWorth: s.netWorth })),
+		rates,
 		asOf
 	};
 }

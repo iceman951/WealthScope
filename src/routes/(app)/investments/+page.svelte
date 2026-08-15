@@ -205,9 +205,20 @@
 							{#if data.total.totalReturnPercent}
 								· {fmt.percent(data.total.totalReturnPercent, 1, true)}
 							{/if}
+							{#if data.total.incomplete}
+								· partial
+							{/if}
 						</span>
 					</div>
 				</div>
+				{#if data.total.missingRates.length > 0}
+					<p class="text-muted small warn">
+						No exchange rate for {data.total.missingRates.join(', ')}. Realised gains and income
+						leave those transactions out, so the figures above are a floor rather than a total.
+						Record the rate in <a href="/settings">settings</a>, or the rate on the transaction
+						itself, to complete them.
+					</p>
+				{/if}
 				{#if data.realised.unmatchedSales > 0}
 					<p class="text-muted small warn">
 						{data.realised.unmatchedSales}

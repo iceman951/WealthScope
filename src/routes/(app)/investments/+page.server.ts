@@ -25,8 +25,11 @@ export const load: PageServerLoad = async (event) => {
 	]);
 
 	const { metrics, settings } = analysis;
-	const realised = realisedGains(history);
-	const income = investmentIncome(history);
+	// The full history, never the paged display list: FIFO needs every lot, and
+	// matching a sell against a truncated set would invent unmatched sales.
+	const returnContext = { baseCurrency: settings.baseCurrency, rates: analysis.rates };
+	const realised = realisedGains(history, returnContext);
+	const income = investmentIncome(history, returnContext);
 	const total = totalReturn(metrics.portfolio, realised, income);
 
 	return {
@@ -47,7 +50,8 @@ export const load: PageServerLoad = async (event) => {
 			gain: realised.realisedGain,
 			proceeds: realised.proceeds,
 			costOfSales: realised.costOfSales,
-			unmatchedSales: realised.unmatchedSales
+			unmatchedSales: realised.unmatchedSales,
+			excludedTransactions: realised.excludedTransactions
 		},
 		income,
 		total,
