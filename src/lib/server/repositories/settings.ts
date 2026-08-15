@@ -4,7 +4,8 @@ import {
 	DEFAULT_INFLATION_ASSUMPTION,
 	DEFAULT_LOCALE,
 	DEFAULT_RETURN_ASSUMPTION,
-	DEFAULT_TIMEZONE
+	DEFAULT_TIMEZONE,
+	type SleeveTargets
 } from '$lib/types/domain';
 import type { UserSettings } from '$lib/types/session';
 import type { SettingsInput } from '$lib/schemas/settings';
@@ -25,6 +26,7 @@ const FALLBACK: UserSettings = {
 	displayDecimals: 0,
 	birthYear: null,
 	retirementAge: null,
+	sleeveTargets: null,
 	onboardedAt: null
 };
 
@@ -54,13 +56,17 @@ export async function getSettings(userId: string, db: DbClient = read()): Promis
 		displayDecimals: row.displayDecimals,
 		birthYear: row.birthYear,
 		retirementAge: row.retirementAge,
+		sleeveTargets: row.sleeveTargets ?? null,
 		onboardedAt: row.onboardedAt ? row.onboardedAt.toISOString() : null
 	};
 }
 
 export async function upsertSettings(
 	userId: string,
-	input: Partial<SettingsInput> & { onboardedAt?: Date | null },
+	input: Partial<SettingsInput> & {
+		onboardedAt?: Date | null;
+		sleeveTargets?: SleeveTargets | null;
+	},
 	db: DbClient = read()
 ) {
 	const rows = await db

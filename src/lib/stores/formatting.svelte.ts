@@ -86,6 +86,7 @@ export function getFormatters(): Formatters {
 			displayDecimals: 0,
 			birthYear: null,
 			retirementAge: null,
+			sleeveTargets: null,
 			onboardedAt: null
 		}))
 	);

@@ -27,7 +27,8 @@ import {
 	IMPORT_STATUSES,
 	LIABILITY_TYPES,
 	PRICE_SOURCES,
-	TRANSACTION_TYPES
+	TRANSACTION_TYPES,
+	type SleeveTargets
 } from '$lib/types/domain';
 import { user } from './auth';
 import {
@@ -370,6 +371,14 @@ export const userFinancialSettings = pgTable(
 		displayDecimals: integer('display_decimals').notNull().default(0),
 		birthYear: integer('birth_year'),
 		retirementAge: integer('retirement_age'),
+		/**
+		 * Target sleeve weights in percent, e.g. { Equities: 55, Bonds: 20, … }.
+		 * Null means the user has not set any and DEFAULT_SLEEVE_TARGETS applies.
+		 * Shape is validated by sleeveTargetsSchema, not by a CHECK constraint —
+		 * a sum-to-100 rule over jsonb is unreadable SQL, and Zod is where this
+		 * application validates shapes.
+		 */
+		sleeveTargets: jsonb('sleeve_targets').$type<SleeveTargets>(),
 		/** Set once the three-step first-run wizard completes; null means "show it". */
 		onboardedAt: timestamp('onboarded_at', { withTimezone: true }),
 		createdAt: createdAt(),

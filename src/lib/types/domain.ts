@@ -68,6 +68,12 @@ export const ASSET_TYPE_LABELS: Record<AssetType, string> = {
 export const SLEEVES = ['Equities', 'Bonds', 'Commodities', 'Cash equivalents', 'Other'] as const;
 export type Sleeve = (typeof SLEEVES)[number];
 
+/**
+ * Target weights per sleeve, in percent. Declared here rather than inferred from
+ * the Zod schema so the database schema can use it without importing Zod.
+ */
+export type SleeveTargets = Partial<Record<Sleeve, number>>;
+
 export function sleeveOf(assetType: AssetType): Sleeve {
 	switch (assetType) {
 		case 'stock':

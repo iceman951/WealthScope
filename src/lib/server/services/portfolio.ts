@@ -72,7 +72,8 @@ export async function loadAnalysis(
 		settings: {
 			baseCurrency: settings.baseCurrency,
 			emergencyFundMonths: settings.emergencyFundMonths,
-			sleeveTargets: DEFAULT_SLEEVE_TARGETS
+			// The documented fallback for anyone who has not set their own.
+			sleeveTargets: settings.sleeveTargets ?? DEFAULT_SLEEVE_TARGETS
 		},
 		asOf
 	});

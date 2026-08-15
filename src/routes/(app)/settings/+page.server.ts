@@ -1,6 +1,6 @@
 import { fail } from '@sveltejs/kit';
 import { exchangeRateInputSchema } from '$lib/schemas/financial';
-import { settingsInputSchema } from '$lib/schemas/settings';
+import { settingsInputSchema, sleeveTargetsSchema } from '$lib/schemas/settings';
 import { updateProfileSchema } from '$lib/schemas/auth';
 import { requireUser, requireUserOrFail } from '$lib/server/authorization';
 import { getSettings, upsertSettings } from '$lib/server/repositories/settings';
@@ -59,6 +59,26 @@ export const actions: Actions = {
 		);
 		if (!result.ok) return fail(500, result.failure);
 		return ok('Preferences saved.');
+	},
+
+	sleeveTargets: async (event) => {
+		const user = requireUserOrFail(event);
+		// The form's field names are the sleeve names, so the parsed object is the
+		// record itself — no wrapper schema needed.
+		const parsed = parseForm(sleeveTargetsSchema, await event.request.formData());
+		if (!parsed.ok) return fail(400, parsed.failure);
+
+		const result = await attempt(
+			{
+				event: 'settings.sleeve_targets',
+				route: '/settings',
+				user: user.id,
+				values: parsed.values
+			},
+			() => upsertSettings(user.id, { sleeveTargets: parsed.value })
+		);
+		if (!result.ok) return fail(500, result.failure);
+		return ok('Portfolio targets saved.');
 	},
 
 	profile: async (event) => {

@@ -1,0 +1,1 @@
+ALTER TABLE "user_financial_settings" ADD COLUMN "sleeve_targets" jsonb;

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { sleeveTargetsSchema } from '../../src/lib/schemas/settings';
 import {
 	currencyCodeSchema,
 	fieldErrors,
@@ -301,5 +302,46 @@ describe('fieldErrors', () => {
 			expect(errors.name).toBeDefined();
 			expect(errors.email).toBeDefined();
 		}
+	});
+});
+
+describe('sleeveTargetsSchema', () => {
+	const full = (over: Partial<Record<string, unknown>> = {}) => ({
+		Equities: '55',
+		Bonds: '20',
+		Commodities: '8',
+		'Cash equivalents': '17',
+		Other: '0',
+		...over
+	});
+
+	it('accepts targets adding up to 100', () => {
+		const result = sleeveTargetsSchema.safeParse(full());
+		expect(result.success).toBe(true);
+		if (result.success) expect(result.data.Equities).toBe(55);
+	});
+
+	it('rejects targets that do not add up to 100', () => {
+		const result = sleeveTargetsSchema.safeParse(full({ Equities: '52' }));
+		expect(result.success).toBe(false);
+		if (!result.success) {
+			expect(result.error.issues[0].message).toBe('Target weights must add up to 100%');
+		}
+	});
+
+	it('rejects a negative or over-100 weight', () => {
+		expect(sleeveTargetsSchema.safeParse(full({ Other: '-5', Equities: '60' })).success).toBe(
+			false
+		);
+		expect(sleeveTargetsSchema.safeParse(full({ Equities: '120', Bonds: '-20' })).success).toBe(
+			false
+		);
+	});
+
+	it('tolerates the float error in a sum of thirds', () => {
+		const result = sleeveTargetsSchema.safeParse(
+			full({ Equities: '33.33', Bonds: '33.33', Commodities: '33.34', 'Cash equivalents': '0' })
+		);
+		expect(result.success).toBe(true);
 	});
 });

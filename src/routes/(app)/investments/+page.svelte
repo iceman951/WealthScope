@@ -200,6 +200,7 @@
 				<p class="text-muted small">
 					The black tick marks the target weight. Drift beyond ±5 percentage points raises a
 					rebalance finding in the analysis run.
+					<a href="/settings#sleeve-targets">Edit targets</a>.
 				</p>
 			</div>
 

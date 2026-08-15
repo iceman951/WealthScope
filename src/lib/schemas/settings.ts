@@ -53,8 +53,19 @@ export const projectionAssumptionsSchema = z.object({
 });
 export type ProjectionAssumptionsInput = z.infer<typeof projectionAssumptionsSchema>;
 
+/**
+ * Target sleeve weights, in percent.
+ *
+ * Zod 4's `z.record` over an enum requires every key, which suits this: the form
+ * renders all five sleeves, and "must add up to 100" is only meaningful when
+ * none is missing. The tolerance absorbs the float arithmetic of the sum itself —
+ * the values are user-entered configuration, not money, so they stay plain
+ * numbers and never touch the Decimal path.
+ */
 export const sleeveTargetsSchema = z
 	.record(z.enum(SLEEVES), z.coerce.number().min(0).max(100))
-	.refine((targets) => Object.values(targets).reduce((acc, v) => acc + (v ?? 0), 0) <= 100.0001, {
-		message: 'Target weights cannot add up to more than 100%'
-	});
+	.refine(
+		(targets) =>
+			Math.abs(Object.values(targets).reduce((acc, v) => acc + (v ?? 0), 0) - 100) < 0.01,
+		{ message: 'Target weights must add up to 100%' }
+	);

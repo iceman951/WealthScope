@@ -11,7 +11,8 @@
 	import TextInput from '$components/forms/TextInput.svelte';
 	import { getFormatters } from '$lib/stores/formatting.svelte';
 	import { showToast } from '$lib/stores/toast.svelte';
-	import { SUPPORTED_CURRENCIES } from '$lib/types/domain';
+	import { SLEEVES, SUPPORTED_CURRENCIES, type Sleeve } from '$lib/types/domain';
+	import { DEFAULT_SLEEVE_TARGETS } from '$engine/analysis';
 	import type { ActionData, PageData } from './$types';
 
 	let { data, form }: { data: PageData; form: ActionData } = $props();
@@ -21,6 +22,7 @@
 	let savingPrefs = $state(false);
 	let savingProfile = $state(false);
 	let savingRate = $state(false);
+	let savingSleeves = $state(false);
 	let theme = $state<'light' | 'dark' | 'system'>('system');
 
 	const errors = $derived(form?.success === false ? form.errors : {});
@@ -74,6 +76,21 @@
 	function field(name: string, fallback: string): string {
 		return values[name] ?? fallback;
 	}
+
+	/**
+	 * Sleeve targets. The field names are the sleeve names, so the submitted form
+	 * parses straight into the record sleeveTargetsSchema expects.
+	 */
+	const savedTargets = $derived(data.settings.sleeveTargets ?? DEFAULT_SLEEVE_TARGETS);
+
+	function sleeveValue(sleeve: Sleeve): string {
+		return field(sleeve, String(savedTargets[sleeve] ?? 0));
+	}
+
+	// Shown live so the sum is fixed before submitting rather than after a
+	// server round trip rejects it.
+	const sleeveTotal = $derived(SLEEVES.reduce((acc, s) => acc + (Number(sleeveValue(s)) || 0), 0));
+	const sleeveTotalOk = $derived(Math.abs(sleeveTotal - 100) < 0.01);
 
 	const today = new Date().toISOString().slice(0, 10);
 </script>
@@ -308,6 +325,55 @@
 
 			<Button variant="primary" type="submit" pending={savingPrefs} pendingLabel="Saving…">
 				Save preferences
+			</Button>
+		</form>
+
+		<div class="hr"></div>
+
+		<h4 id="sleeve-targets">Portfolio targets</h4>
+		<p class="text-muted small">
+			The weight each sleeve should carry. Drift beyond ±5 percentage points raises a rebalance
+			finding, and the Investments screen marks the target on each bar. Leave these at the defaults
+			if you have no policy of your own.
+		</p>
+
+		<form
+			method="POST"
+			action="?/sleeveTargets"
+			use:enhance={() => {
+				savingSleeves = true;
+				return async ({ update }) => {
+					await update({ reset: false });
+					savingSleeves = false;
+				};
+			}}
+			novalidate
+		>
+			<div class="fields">
+				<div class="sleeve-grid">
+					{#each SLEEVES as sleeve (sleeve)}
+						<FormField id="sleeve-{sleeve}" label="{sleeve} (%)" errors={errors[sleeve]}>
+							{#snippet children({ id, describedBy, invalid })}
+								<NumberInput
+									{id}
+									name={sleeve}
+									{invalid}
+									{describedBy}
+									align="right"
+									value={sleeveValue(sleeve)}
+								/>
+							{/snippet}
+						</FormField>
+					{/each}
+				</div>
+
+				<p class="text-muted small" class:warn={!sleeveTotalOk}>
+					Total: {sleeveTotal}%{sleeveTotalOk ? '' : ' — must be 100%'}
+				</p>
+			</div>
+
+			<Button variant="primary" type="submit" pending={savingSleeves} pendingLabel="Saving…">
+				Save targets
 			</Button>
 		</form>
 
@@ -554,6 +620,12 @@
 	.pair {
 		display: grid;
 		grid-template-columns: 1fr 1fr;
+		gap: var(--space-3);
+	}
+	/* Five sleeves, so they wrap rather than being forced into a fixed pair. */
+	.sleeve-grid {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
 		gap: var(--space-3);
 	}
 	.small {
