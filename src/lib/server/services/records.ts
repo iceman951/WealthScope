@@ -162,6 +162,20 @@ export function listTransactions(
 	return transactionsRepo.listTransactions(userId, options);
 }
 
+/**
+ * One page of transactions for display.
+ *
+ * Never use this to feed a return calculation: FIFO lot matching needs the whole
+ * history, and a page of it would invent unmatched sales. See
+ * `loadTransactionHistory` in ./portfolio.ts for that.
+ */
+export function listTransactionsPaged(
+	userId: string,
+	options: { assetId?: string; page?: number; pageSize?: number } = {}
+) {
+	return transactionsRepo.listTransactionsPaged(userId, options);
+}
+
 export async function createTransaction(userId: string, input: TransactionInputPayload) {
 	await assertAccountOwned(userId, input.accountId);
 	if (input.assetId) {

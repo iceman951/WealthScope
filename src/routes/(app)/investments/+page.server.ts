@@ -11,16 +11,24 @@ import { listAccounts } from '$lib/server/repositories/accounts';
 import { loadAnalysis, loadTransactionHistory } from '$lib/server/services/portfolio';
 import * as records from '$lib/server/services/records';
 import { attempt, ok, parseForm } from '$lib/server/services/result';
-import { listTransactions } from '$lib/server/repositories/transactions';
 import type { Actions, PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async (event) => {
 	const user = requireUser(event);
 
+	// pageBounds clamps the range but not NaN, and Math.trunc(NaN) is NaN, which
+	// would reach the query as OFFSET NaN. Settle it here.
+	const requestedPage = Number(event.url.searchParams.get('page'));
+	const page = Number.isFinite(requestedPage) && requestedPage >= 1 ? Math.trunc(requestedPage) : 1;
+
 	const [analysis, accounts, transactions, history] = await Promise.all([
 		loadAnalysis(user.id),
 		listAccounts(user.id),
-		listTransactions(user.id, { limit: 50 }),
+		// The display table only.
+		records.listTransactionsPaged(user.id, { page }),
+		// The whole history, deliberately unbounded: FIFO cost basis is computed
+		// from every lot ever opened. Paginating this would drop the oldest buys
+		// and report the sells against them as unmatched.
 		loadTransactionHistory(user.id)
 	]);
 
@@ -55,7 +63,12 @@ export const load: PageServerLoad = async (event) => {
 		},
 		income,
 		total,
-		transactions: transactions.map((tx) => ({
+		pagination: {
+			page: transactions.page,
+			pageSize: transactions.pageSize,
+			total: transactions.total
+		},
+		transactions: transactions.rows.map((tx) => ({
 			id: tx.id,
 			date: tx.transactionDate,
 			type: tx.transactionType,

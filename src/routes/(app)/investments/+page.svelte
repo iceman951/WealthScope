@@ -11,6 +11,7 @@
 	import NumberInput from '$components/forms/NumberInput.svelte';
 	import RecordDialog from '$components/forms/RecordDialog.svelte';
 	import Select from '$components/forms/Select.svelte';
+	import Pagination from '$components/tables/Pagination.svelte';
 	import { getFormatters } from '$lib/stores/formatting.svelte';
 	import { showToast } from '$lib/stores/toast.svelte';
 	import {
@@ -75,6 +76,12 @@
 
 	/** Currency drives the money inputs' prefix, so it follows the record being edited. */
 	const txCurrency = $derived(field('currency', editing?.currency ?? data.baseCurrency));
+
+	/**
+	 * Page number rides in the URL, so the links work without JavaScript.
+	 * `page` is the route's only query parameter; add to this if that changes.
+	 */
+	const pageHref = (target: number) => `/investments?page=${target}`;
 
 	const isEmpty = $derived(data.holdings.length === 0);
 </script>
@@ -252,9 +259,15 @@
 
 	<div class="ws-pad ws-scroll-x transactions">
 		<h5>Transactions</h5>
-		{#if data.transactions.length === 0}
+		{#if data.pagination.total === 0}
 			<p class="text-muted small">
 				No transactions recorded. Buys and sells give cost basis and realised gains their inputs.
+			</p>
+		{:else if data.transactions.length === 0}
+			<!-- A page number past the end. There are records, just not here. -->
+			<p class="text-muted small">
+				That page is past the end of {data.pagination.total} transactions.
+				<a href={pageHref(1)}>Back to the first page</a>.
 			</p>
 		{:else}
 			<table class="table">
@@ -299,6 +312,12 @@
 					{/each}
 				</tbody>
 			</table>
+			<Pagination
+				page={data.pagination.page}
+				pageSize={data.pagination.pageSize}
+				total={data.pagination.total}
+				hrefFor={pageHref}
+			/>
 		{/if}
 	</div>
 {/if}
