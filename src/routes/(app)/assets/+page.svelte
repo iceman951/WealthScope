@@ -59,13 +59,31 @@
 		...data.accounts.map((a) => ({ value: a.id, label: `${a.name} (${a.currency})` }))
 	]);
 
+	/**
+	 * The live currency selection, null until the user picks one in this dialog.
+	 * `field()` only sees values echoed back by a failed submission, so without
+	 * this the money fields keep showing the base currency's code beside an
+	 * amount the user has just declared to be in another one.
+	 */
+	let currencyChoice = $state<string | null>(null);
+
+	function onCurrencyChange(event: Event) {
+		currencyChoice = (event.currentTarget as HTMLSelectElement).value;
+	}
+
+	const assetCurrency = $derived(
+		currencyChoice ?? field('currency', editing?.currency ?? data.baseCurrency)
+	);
+
 	function openCreate() {
 		editing = null;
+		currencyChoice = null;
 		dialog = 'create';
 	}
 
 	function openEdit(row: Row) {
 		editing = row;
+		currencyChoice = null;
 		dialog = 'edit';
 	}
 
@@ -257,7 +275,8 @@
 					required
 					{invalid}
 					{describedBy}
-					value={field('currency', editing?.currency ?? data.baseCurrency)}
+					value={assetCurrency}
+					onchange={onCurrencyChange}
 				/>
 			{/snippet}
 		</FormField>
@@ -305,7 +324,7 @@
 				<CurrencyInput
 					{id}
 					name="unitPrice"
-					currency={field('currency', editing?.currency ?? data.baseCurrency)}
+					currency={assetCurrency}
 					{invalid}
 					{describedBy}
 					value={field('unitPrice', editing?.unitPrice ?? '0')}
@@ -325,7 +344,7 @@
 				<CurrencyInput
 					{id}
 					name="manualValue"
-					currency={field('currency', editing?.currency ?? data.baseCurrency)}
+					currency={assetCurrency}
 					{invalid}
 					{describedBy}
 					value={field('manualValue', editing?.manualValue ?? '')}
@@ -346,7 +365,7 @@
 				<CurrencyInput
 					{id}
 					name="acquisitionFees"
-					currency={field('currency', editing?.currency ?? data.baseCurrency)}
+					currency={assetCurrency}
 					{invalid}
 					{describedBy}
 					value={field('acquisitionFees', editing?.acquisitionFees ?? '')}
@@ -365,7 +384,7 @@
 				<CurrencyInput
 					{id}
 					name="acquisitionCost"
-					currency={field('currency', editing?.currency ?? data.baseCurrency)}
+					currency={assetCurrency}
 					{invalid}
 					{describedBy}
 					value={field('acquisitionCost', editing?.acquisitionCost ?? '')}

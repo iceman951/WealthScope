@@ -64,18 +64,36 @@
 		return values[name] ?? fallback;
 	}
 
+	/**
+	 * The live currency selection, null until the user picks one in this dialog.
+	 *
+	 * `field()` only sees values echoed back by a failed submission, so on its own
+	 * it cannot follow the select as it changes — the money inputs would keep the
+	 * base currency's code beside a foreign amount, and the exchange-rate field
+	 * below would never appear on a new record.
+	 */
+	let currencyChoice = $state<string | null>(null);
+
+	function onCurrencyChange(event: Event) {
+		currencyChoice = (event.currentTarget as HTMLSelectElement).value;
+	}
+
 	function openCreateTransaction() {
 		editing = null;
+		currencyChoice = null;
 		dialog = 'transaction';
 	}
 
 	function openEditTransaction(tx: Tx) {
 		editing = tx;
+		currencyChoice = null;
 		dialog = 'transaction';
 	}
 
-	/** Currency drives the money inputs' prefix, so it follows the record being edited. */
-	const txCurrency = $derived(field('currency', editing?.currency ?? data.baseCurrency));
+	/** Drives every money field's prefix and whether a rate is asked for. */
+	const txCurrency = $derived(
+		currencyChoice ?? field('currency', editing?.currency ?? data.baseCurrency)
+	);
 
 	/**
 	 * Page number rides in the URL, so the links work without JavaScript.
@@ -467,6 +485,7 @@
 					{invalid}
 					{describedBy}
 					value={txCurrency}
+					onchange={onCurrencyChange}
 				/>
 			{/snippet}
 		</FormField>
