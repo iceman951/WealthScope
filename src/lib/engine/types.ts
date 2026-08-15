@@ -26,7 +26,10 @@ export interface AssetInput {
 	quantity: string;
 	unitPrice: string;
 	manualValue: string | null;
+	/** All-in cost basis, brokerage fees included. */
 	acquisitionCost: string | null;
+	/** The fee portion of `acquisitionCost`, for display only — never added again. */
+	acquisitionFees: string | null;
 	valuationDate: string;
 	accountId: string | null;
 	accountName: string | null;

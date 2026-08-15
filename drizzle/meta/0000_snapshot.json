@@ -1,5 +1,5 @@
 {
-  "id": "5a52dd0c-89e1-4fcd-979d-f47e397f8da5",
+  "id": "87999a42-1b3a-4aca-8c25-4364cff6e1e9",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -590,6 +590,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "acquisition_fees": {
+          "name": "acquisition_fees",
+          "type": "numeric(24, 8)",
+          "primaryKey": false,
+          "notNull": false
+        },
         "valuation_date": {
           "name": "valuation_date",
           "type": "date",
@@ -768,6 +774,10 @@
         "assets_unit_price_chk": {
           "name": "assets_unit_price_chk",
           "value": "\"unit_price\" >= 0"
+        },
+        "assets_fees_chk": {
+          "name": "assets_fees_chk",
+          "value": "\"acquisition_fees\" >= 0"
         }
       },
       "isRLSEnabled": false

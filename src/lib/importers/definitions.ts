@@ -140,6 +140,7 @@ export const assetRowSchema = z.object({
 	unitPrice: moneySchema('Unit price').default('0'),
 	manualValue: optionalMoneySchema('Value'),
 	acquisitionCost: optionalMoneySchema('Cost'),
+	acquisitionFees: optionalMoneySchema('Fees'),
 	valuationDate: isoDateSchema
 });
 
@@ -198,6 +199,7 @@ export const IMPORT_DEFINITIONS: Record<ImportKind, ImportDefinition> = {
 			'unit_price',
 			'value',
 			'cost',
+			'fees',
 			'valuation_date'
 		],
 		fields: [
@@ -244,6 +246,13 @@ export const IMPORT_DEFINITIONS: Record<ImportKind, ImportDefinition> = {
 				label: 'Cost',
 				required: false,
 				aliases: ['cost', 'book_cost', 'acquisition_cost', 'basis']
+			},
+			{
+				key: 'acquisitionFees',
+				label: 'Fees',
+				required: false,
+				aliases: ['fees', 'fee', 'commission', 'brokerage', 'acquisition_fees'],
+				hint: 'Added to quantity × price when no cost is given.'
 			},
 			{
 				key: 'valuationDate',

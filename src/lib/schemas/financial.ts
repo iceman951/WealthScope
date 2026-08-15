@@ -1,4 +1,6 @@
 import { z } from 'zod';
+import { assetNativeValue } from '$engine/net-worth';
+import { toStorage } from '$engine/money';
 import {
 	ACCOUNT_TYPES,
 	ASSET_TYPES,
@@ -61,6 +63,7 @@ export const assetInputSchema = z
 		unitPrice: moneySchema('Unit price'),
 		manualValue: optionalMoneySchema('Value'),
 		acquisitionCost: optionalMoneySchema('Acquisition cost'),
+		acquisitionFees: optionalMoneySchema('Fees'),
 		valuationDate: isoDateSchema,
 		notes: notesSchema
 	})
@@ -76,6 +79,15 @@ export const assetInputSchema = z
 				message: 'Enter a value, or a quantity and a unit price'
 			});
 		}
+	})
+	.transform((value) => {
+		// Cost basis is stored all-in. Someone entering a holding on the day they
+		// bought it knows the quantity, the price and the broker's fee, but not the
+		// total — so when the cost field is left blank, derive it rather than asking
+		// them to do the arithmetic. A cost typed by hand is already all-in and wins.
+		if (value.acquisitionCost !== null || value.acquisitionFees === null) return value;
+		const paid = assetNativeValue(value).plus(value.acquisitionFees);
+		return { ...value, acquisitionCost: toStorage(paid) };
 	});
 export type AssetInputPayload = z.infer<typeof assetInputSchema>;
 

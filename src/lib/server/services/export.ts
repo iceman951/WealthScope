@@ -63,6 +63,7 @@ export async function buildCsv(userId: string, kind: ExportKind): Promise<string
 				{ header: 'unit_price', value: (r) => r.unitPrice },
 				{ header: 'value', value: (r) => r.manualValue },
 				{ header: 'cost', value: (r) => r.acquisitionCost },
+				{ header: 'fees', value: (r) => r.acquisitionFees },
 				{ header: 'valuation_date', value: (r) => r.valuationDate },
 				{ header: 'account', value: (r) => r.accountName },
 				{ header: 'notes', value: (r) => r.notes }

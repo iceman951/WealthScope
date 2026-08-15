@@ -139,6 +139,47 @@ describe('assetInputSchema', () => {
 	it('rejects an unknown asset class', () => {
 		expect(assetInputSchema.safeParse({ ...valid, assetType: 'unicorns' }).success).toBe(false);
 	});
+
+	it('derives the cost basis from quantity, price and fees', () => {
+		const result = assetInputSchema.parse({
+			...valid,
+			quantity: '10',
+			unitPrice: '150',
+			acquisitionFees: '4.95'
+		});
+		expect(result.acquisitionCost).toBe('1504.95000000');
+		expect(result.acquisitionFees).toBe('4.95');
+	});
+
+	it('adds fees to a manual valuation when no cost is given', () => {
+		const result = assetInputSchema.parse({
+			...valid,
+			quantity: '0',
+			unitPrice: '0',
+			manualValue: '8400000',
+			acquisitionFees: '210000'
+		});
+		expect(result.acquisitionCost).toBe('8610000.00000000');
+	});
+
+	it('leaves a hand-entered cost alone — it is already all-in', () => {
+		const result = assetInputSchema.parse({
+			...valid,
+			quantity: '10',
+			unitPrice: '150',
+			acquisitionCost: '1400',
+			acquisitionFees: '4.95'
+		});
+		expect(result.acquisitionCost).toBe('1400');
+	});
+
+	it('records no cost basis when neither cost nor fees are given', () => {
+		expect(assetInputSchema.parse(valid).acquisitionCost).toBeNull();
+	});
+
+	it('rejects a negative fee', () => {
+		expect(assetInputSchema.safeParse({ ...valid, acquisitionFees: '-5' }).success).toBe(false);
+	});
 });
 
 describe('transactionInputSchema', () => {

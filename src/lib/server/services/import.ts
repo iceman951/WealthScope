@@ -1,5 +1,7 @@
 import { error } from '@sveltejs/kit';
 import { and, eq } from 'drizzle-orm';
+import { assetNativeValue } from '$engine/net-worth';
+import { toStorage } from '$engine/money';
 import type { ImportKind } from '$lib/types/domain';
 import {
 	MAX_CSV_BYTES,
@@ -224,19 +226,34 @@ function nullableStr(value: unknown): string | null {
 async function insertAssets(tx: Tx, userId: string, rows: readonly Row[]) {
 	if (rows.length === 0) return { imported: 0, skipped: 0 };
 	await tx.insert(assets).values(
-		rows.map((row) => ({
-			userId,
-			name: str(row.name),
-			assetType: str(row.assetType),
-			symbol: nullableStr(row.symbol),
-			currency: str(row.currency),
-			quantity: str(row.quantity, '1'),
-			unitPrice: str(row.unitPrice, '0'),
-			manualValue: nullableStr(row.manualValue),
-			acquisitionCost: nullableStr(row.acquisitionCost),
-			valuationDate: str(row.valuationDate),
-			notes: 'Imported from CSV'
-		}))
+		rows.map((row) => {
+			const quantity = str(row.quantity, '1');
+			const unitPrice = str(row.unitPrice, '0');
+			const manualValue = nullableStr(row.manualValue);
+			const acquisitionFees = nullableStr(row.acquisitionFees);
+			return {
+				userId,
+				name: str(row.name),
+				assetType: str(row.assetType),
+				symbol: nullableStr(row.symbol),
+				currency: str(row.currency),
+				quantity,
+				unitPrice,
+				manualValue,
+				// Same rule as the form: a fees column with no cost column means the
+				// spreadsheet recorded what was paid, not the basis. See assetInputSchema.
+				acquisitionCost:
+					nullableStr(row.acquisitionCost) ??
+					(acquisitionFees === null
+						? null
+						: toStorage(
+								assetNativeValue({ quantity, unitPrice, manualValue }).plus(acquisitionFees)
+							)),
+				acquisitionFees,
+				valuationDate: str(row.valuationDate),
+				notes: 'Imported from CSV'
+			};
+		})
 	);
 	return { imported: rows.length, skipped: 0 };
 }

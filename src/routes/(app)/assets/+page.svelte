@@ -333,12 +333,33 @@
 				/>
 			{/snippet}
 		</FormField>
+	</div>
+
+	<div class="pair">
+		<FormField
+			id="asset-fees"
+			label="Fees"
+			errors={errors.acquisitionFees}
+			hint="Commission and charges paid to buy this."
+		>
+			{#snippet children({ id, describedBy, invalid })}
+				<CurrencyInput
+					{id}
+					name="acquisitionFees"
+					currency={field('currency', editing?.currency ?? data.baseCurrency)}
+					{invalid}
+					{describedBy}
+					value={field('acquisitionFees', editing?.acquisitionFees ?? '')}
+					placeholder=""
+				/>
+			{/snippet}
+		</FormField>
 
 		<FormField
 			id="asset-cost"
 			label="Acquisition cost"
 			errors={errors.acquisitionCost}
-			hint="Needed for gain and return figures."
+			hint="Leave blank to use quantity × price plus fees."
 		>
 			{#snippet children({ id, describedBy, invalid })}
 				<CurrencyInput

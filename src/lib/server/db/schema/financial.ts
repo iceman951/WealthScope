@@ -99,7 +99,16 @@ export const assets = pgTable(
 		 * When present it wins over quantity × unitPrice.
 		 */
 		manualValue: money('manual_value'),
+		/**
+		 * All-in cost basis: what was paid, brokerage fees included. Gain and return
+		 * read this one column, so nothing downstream has to remember to add fees.
+		 */
 		acquisitionCost: money('acquisition_cost'),
+		/**
+		 * The fee portion of `acquisitionCost`, kept apart so the breakdown survives
+		 * an edit and so the form can derive the total from what was actually paid.
+		 */
+		acquisitionFees: money('acquisition_fees'),
 		valuationDate: date('valuation_date').notNull(),
 		notes: text('notes'),
 		createdAt: createdAt(),
@@ -115,7 +124,8 @@ export const assets = pgTable(
 		check('assets_type_chk', oneOf('asset_type', ASSET_TYPES)),
 		check('assets_currency_chk', isCurrencyCode('currency')),
 		check('assets_quantity_chk', isNonNegative('quantity')),
-		check('assets_unit_price_chk', isNonNegative('unit_price'))
+		check('assets_unit_price_chk', isNonNegative('unit_price')),
+		check('assets_fees_chk', isNonNegative('acquisition_fees'))
 	]
 );
 

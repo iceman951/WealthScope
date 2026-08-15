@@ -39,6 +39,7 @@ export const load: PageServerLoad = async (event) => {
 			unitPrice: a.asset.unitPrice,
 			manualValue: a.asset.manualValue,
 			acquisitionCost: a.asset.acquisitionCost,
+			acquisitionFees: a.asset.acquisitionFees,
 			valuationDate: a.asset.valuationDate,
 			accountId: a.asset.accountId,
 			accountName: a.asset.accountName,

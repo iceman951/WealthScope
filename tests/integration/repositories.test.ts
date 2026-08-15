@@ -132,6 +132,7 @@ suite('repositories (integration)', () => {
 					unitPrice: '100000',
 					manualValue: null,
 					acquisitionCost: null,
+					acquisitionFees: null,
 					valuationDate: '2026-08-01',
 					notes: null
 				},
@@ -160,6 +161,7 @@ suite('repositories (integration)', () => {
 					unitPrice: '100',
 					manualValue: null,
 					acquisitionCost: '900',
+					acquisitionFees: null,
 					valuationDate: '2026-08-01',
 					notes: null
 				},
@@ -191,6 +193,7 @@ suite('repositories (integration)', () => {
 					unitPrice: '100',
 					manualValue: null,
 					acquisitionCost: null,
+					acquisitionFees: null,
 					valuationDate: '2026-08-01',
 					notes: null
 				},
@@ -279,6 +282,7 @@ suite('repositories (integration)', () => {
 					unitPrice: '0',
 					manualValue: exact,
 					acquisitionCost: null,
+					acquisitionFees: null,
 					valuationDate: '2026-08-01',
 					notes: null
 				},
@@ -303,6 +307,7 @@ suite('repositories (integration)', () => {
 					unitPrice: '100000',
 					manualValue: null,
 					acquisitionCost: null,
+					acquisitionFees: null,
 					valuationDate: '2026-08-01',
 					notes: null
 				},

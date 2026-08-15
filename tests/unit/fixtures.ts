@@ -26,6 +26,7 @@ export function asset(overrides: Partial<AssetInput> = {}): AssetInput {
 		unitPrice: '1000',
 		manualValue: null,
 		acquisitionCost: null,
+		acquisitionFees: null,
 		valuationDate: '2026-08-01',
 		accountId: null,
 		accountName: null,

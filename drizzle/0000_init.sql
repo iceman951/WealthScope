@@ -71,6 +71,7 @@ CREATE TABLE "assets" (
 	"unit_price" numeric(24, 8) DEFAULT '0' NOT NULL,
 	"manual_value" numeric(24, 8),
 	"acquisition_cost" numeric(24, 8),
+	"acquisition_fees" numeric(24, 8),
 	"valuation_date" date NOT NULL,
 	"notes" text,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
@@ -78,7 +79,8 @@ CREATE TABLE "assets" (
 	CONSTRAINT "assets_type_chk" CHECK ("asset_type" IN ('cash', 'stock', 'etf', 'bond', 'fund', 'crypto', 'property', 'vehicle', 'business', 'collectible', 'other')),
 	CONSTRAINT "assets_currency_chk" CHECK ("currency" ~ '^[A-Z]{3}$'),
 	CONSTRAINT "assets_quantity_chk" CHECK ("quantity" >= 0),
-	CONSTRAINT "assets_unit_price_chk" CHECK ("unit_price" >= 0)
+	CONSTRAINT "assets_unit_price_chk" CHECK ("unit_price" >= 0),
+	CONSTRAINT "assets_fees_chk" CHECK ("acquisition_fees" >= 0)
 );
 --> statement-breakpoint
 CREATE TABLE "cashflow_entries" (
