@@ -69,7 +69,11 @@ export const load: PageServerLoad = async (event) => {
 			grossAmount: tx.grossAmount,
 			feeAmount: tx.feeAmount,
 			taxAmount: tx.taxAmount,
-			currency: tx.currency
+			currency: tx.currency,
+			// Both are optional on transactionInputSchema, so an edit that does not
+			// carry them writes null. They travel to the dialog to be sent back.
+			exchangeRate: tx.exchangeRate,
+			notes: tx.notes
 		})),
 		accounts: accounts.map((a) => ({ id: a.id, name: a.name, currency: a.currency })),
 		holdingOptions: metrics.portfolio.holdings.map((h) => ({
@@ -93,6 +97,22 @@ export const actions: Actions = {
 		);
 		if (!result.ok) return fail(500, result.failure);
 		return ok('Transaction recorded.');
+	},
+
+	updateTransaction: async (event) => {
+		const user = requireUserOrFail(event);
+		// transactionInputSchema has no id field, so read it before parsing.
+		const data = await event.request.formData();
+		const id = String(data.get('id') ?? '');
+		const parsed = parseForm(transactionInputSchema, data);
+		if (!parsed.ok) return fail(400, parsed.failure);
+
+		const result = await attempt(
+			{ event: 'transaction.update', route: '/investments', user: user.id, values: parsed.values },
+			() => records.updateTransaction(user.id, id, parsed.value)
+		);
+		if (!result.ok) return fail(500, result.failure);
+		return ok('Transaction updated.');
 	},
 
 	deleteTransaction: async (event) => {

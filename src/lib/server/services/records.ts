@@ -177,6 +177,13 @@ export async function updateTransaction(
 	input: TransactionInputPayload
 ) {
 	await assertAccountOwned(userId, input.accountId);
+	// Same holding check as createTransaction: the repository scopes the row being
+	// updated by userId, but not the assetId being written into it, so without
+	// this an edit could point a transaction at somebody else's holding.
+	if (input.assetId) {
+		const asset = await assetsRepo.findAsset(userId, input.assetId);
+		if (!asset) error(400, 'That holding does not exist.');
+	}
 	const updated = await transactionsRepo.updateTransaction(userId, id, input);
 	if (!updated) error(404, 'That transaction was not found.');
 	return updated;

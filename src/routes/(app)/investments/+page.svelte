@@ -27,15 +27,19 @@
 	type Tx = PageData['transactions'][number];
 
 	let dialog = $state<'none' | 'transaction' | 'price'>('none');
+	/** Set while the transaction dialog is editing rather than creating. */
+	let editing = $state<Tx | null>(null);
 	let deleting = $state<Tx | null>(null);
 
 	const errors = $derived(form?.success === false ? form.errors : {});
 	const values = $derived(form?.success === false ? form.values : {});
 
+	// A failed submission must not close the dialog and lose what was typed.
 	$effect(() => {
 		if (form?.success === true) {
 			showToast(form.message);
 			dialog = 'none';
+			editing = null;
 		}
 	});
 
@@ -58,6 +62,19 @@
 	function field(name: string, fallback: string): string {
 		return values[name] ?? fallback;
 	}
+
+	function openCreateTransaction() {
+		editing = null;
+		dialog = 'transaction';
+	}
+
+	function openEditTransaction(tx: Tx) {
+		editing = tx;
+		dialog = 'transaction';
+	}
+
+	/** Currency drives the money inputs' prefix, so it follows the record being edited. */
+	const txCurrency = $derived(field('currency', editing?.currency ?? data.baseCurrency));
 
 	const isEmpty = $derived(data.holdings.length === 0);
 </script>
@@ -112,9 +129,7 @@
 			<h4>Holdings</h4>
 			<div class="ws-row ws-row--end">
 				<Button variant="secondary" onclick={() => (dialog = 'price')}>Record price</Button>
-				<Button variant="primary" onclick={() => (dialog = 'transaction')}>
-					Record transaction
-				</Button>
+				<Button variant="primary" onclick={openCreateTransaction}>Record transaction</Button>
 			</div>
 		</div>
 
@@ -269,6 +284,13 @@
 								{fmt.money(dec(tx.feeAmount).plus(tx.taxAmount), { currency: tx.currency })}
 							</td>
 							<td class="actions-cell">
+								<button
+									type="button"
+									class="btn btn-ghost small"
+									onclick={() => openEditTransaction(tx)}
+								>
+									Edit
+								</button>
 								<button type="button" class="btn btn-ghost small" onclick={() => (deleting = tx)}>
 									Remove
 								</button>
@@ -283,13 +305,25 @@
 
 <RecordDialog
 	open={dialog === 'transaction'}
-	title="Record transaction"
-	action="?/createTransaction"
-	submitLabel="Save transaction"
+	title={editing ? 'Edit transaction' : 'Record transaction'}
+	action={editing ? '?/updateTransaction' : '?/createTransaction'}
+	submitLabel={editing ? 'Save changes' : 'Save transaction'}
 	formError={errors._form?.join(' ')}
 	description="Buys and sells build the cost basis. Dividends, interest, fees and taxes feed the total-return figure."
-	onclose={() => (dialog = 'none')}
+	onclose={() => {
+		dialog = 'none';
+		editing = null;
+	}}
 >
+	{#if editing}
+		<input type="hidden" name="id" value={editing.id} />
+		<!--
+			Not shown, but carried: the schema treats notes as optional, so omitting
+			it from an edit would write null and silently discard the note.
+		-->
+		<input type="hidden" name="notes" value={editing.notes ?? ''} />
+	{/if}
+
 	<div class="pair">
 		<FormField id="tx-type" label="Type" errors={errors.transactionType} required>
 			{#snippet children({ id, describedBy, invalid })}
@@ -300,7 +334,7 @@
 					required
 					{invalid}
 					{describedBy}
-					value={field('transactionType', 'buy')}
+					value={field('transactionType', editing?.type ?? 'buy')}
 				/>
 			{/snippet}
 		</FormField>
@@ -313,7 +347,7 @@
 					required
 					{invalid}
 					{describedBy}
-					value={field('transactionDate', data.today)}
+					value={field('transactionDate', editing?.date ?? data.today)}
 				/>
 			{/snippet}
 		</FormField>
@@ -329,7 +363,7 @@
 				{invalid}
 				{describedBy}
 				placeholder={accountOptions.length === 0 ? 'Create an account first' : undefined}
-				value={field('accountId', accountOptions[0]?.value ?? '')}
+				value={field('accountId', editing?.accountId ?? accountOptions[0]?.value ?? '')}
 			/>
 		{/snippet}
 	</FormField>
@@ -347,7 +381,7 @@
 				options={holdingOptions}
 				{invalid}
 				{describedBy}
-				value={field('assetId', '')}
+				value={field('assetId', editing?.assetId ?? '')}
 			/>
 		{/snippet}
 	</FormField>
@@ -361,7 +395,7 @@
 					{invalid}
 					{describedBy}
 					align="right"
-					value={field('quantity', '')}
+					value={field('quantity', editing?.quantity ?? '')}
 					placeholder=""
 				/>
 			{/snippet}
@@ -372,10 +406,10 @@
 				<CurrencyInput
 					{id}
 					name="unitPrice"
-					currency={field('currency', data.baseCurrency)}
+					currency={txCurrency}
 					{invalid}
 					{describedBy}
-					value={field('unitPrice', '')}
+					value={field('unitPrice', editing?.unitPrice ?? '')}
 					placeholder=""
 				/>
 			{/snippet}
@@ -394,11 +428,11 @@
 				<CurrencyInput
 					{id}
 					name="grossAmount"
-					currency={field('currency', data.baseCurrency)}
+					currency={txCurrency}
 					required
 					{invalid}
 					{describedBy}
-					value={field('grossAmount', '')}
+					value={field('grossAmount', editing?.grossAmount ?? '')}
 				/>
 			{/snippet}
 		</FormField>
@@ -412,7 +446,7 @@
 					required
 					{invalid}
 					{describedBy}
-					value={field('currency', data.baseCurrency)}
+					value={txCurrency}
 				/>
 			{/snippet}
 		</FormField>
@@ -424,10 +458,10 @@
 				<CurrencyInput
 					{id}
 					name="feeAmount"
-					currency={field('currency', data.baseCurrency)}
+					currency={txCurrency}
 					{invalid}
 					{describedBy}
-					value={field('feeAmount', '0')}
+					value={field('feeAmount', editing?.feeAmount ?? '0')}
 				/>
 			{/snippet}
 		</FormField>
@@ -437,14 +471,38 @@
 				<CurrencyInput
 					{id}
 					name="taxAmount"
-					currency={field('currency', data.baseCurrency)}
+					currency={txCurrency}
 					{invalid}
 					{describedBy}
-					value={field('taxAmount', '0')}
+					value={field('taxAmount', editing?.taxAmount ?? '0')}
 				/>
 			{/snippet}
 		</FormField>
 	</div>
+
+	{#if txCurrency !== data.baseCurrency}
+		<FormField
+			id="tx-rate"
+			label="Exchange rate"
+			errors={errors.exchangeRate}
+			hint="Rate to {data.baseCurrency} on the transaction date. Leave blank to use the rate table. A rate recorded here is what realised gains are measured with."
+		>
+			{#snippet children({ id, describedBy, invalid })}
+				<NumberInput
+					{id}
+					name="exchangeRate"
+					{invalid}
+					{describedBy}
+					align="right"
+					value={field('exchangeRate', editing?.exchangeRate ?? '')}
+					placeholder=""
+				/>
+			{/snippet}
+		</FormField>
+	{:else if editing?.exchangeRate}
+		<!-- Same currency as the base, but a rate is on the record: keep it. -->
+		<input type="hidden" name="exchangeRate" value={editing.exchangeRate} />
+	{/if}
 </RecordDialog>
 
 <RecordDialog
