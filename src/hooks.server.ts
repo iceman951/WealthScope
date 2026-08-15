@@ -1,7 +1,9 @@
 import { building, dev } from '$app/environment';
 import { redirect, type Handle, type HandleServerError } from '@sveltejs/kit';
 import { svelteKitHandler } from 'better-auth/svelte-kit';
+import { env } from '$env/dynamic/private';
 import { getAuth } from '$lib/server/auth';
+import { ensurePglite, isPgliteUrl } from '$lib/server/db/pglite';
 import { PRIVATE_CACHE_CONTROL, securityHeaders } from '$lib/server/security/headers';
 import { log, newCorrelationId, userRef } from '$lib/server/security/logging';
 
@@ -99,6 +101,27 @@ const handleAuth: Handle = async ({ event, resolve }) => {
 	return response;
 };
 
+/**
+ * Brings PGlite up before anything touches the database.
+ *
+ * `getDb()` is synchronous — it has to be, because `read()` is a default
+ * parameter value across the repositories — so the asynchronous open/migrate/seed
+ * happens here instead, once per process. Memoised inside `ensurePglite`, so this
+ * costs one promise check per request after the first.
+ *
+ * It must sit outside `handleAuth`: that calls `getAuth()`, which builds the
+ * Better Auth adapter around `getDb()` eagerly. On the Neon path it is a no-op.
+ */
+const handleDatabase: Handle = async ({ event, resolve }) => {
+	// Prerendering `/`, `/privacy` and `/terms` runs through this chain at build
+	// time, where there is no database to create and none needed.
+	if (!building) {
+		const url = env.DATABASE_URL;
+		if (url && isPgliteUrl(url)) await ensurePglite(url);
+	}
+	return resolve(event);
+};
+
 const handleSecurityHeaders: Handle = async ({ event, resolve }) => {
 	const response = await resolve(event);
 	for (const [name, value] of Object.entries(securityHeaders(dev))) {
@@ -119,9 +142,13 @@ export const handle: Handle = async (input) => {
 	return handleSecurityHeaders({
 		event: input.event,
 		resolve: (event) =>
-			handleAuth({
+			handleDatabase({
 				event,
-				resolve: (inner) => handleBetterAuth({ event: inner, resolve: input.resolve })
+				resolve: (ready) =>
+					handleAuth({
+						event: ready,
+						resolve: (inner) => handleBetterAuth({ event: inner, resolve: input.resolve })
+					})
 			})
 	});
 };

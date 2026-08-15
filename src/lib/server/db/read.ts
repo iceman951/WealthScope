@@ -1,4 +1,4 @@
-import { getDb, type NeonDatabase } from './index';
+import { getDb, type DbClient } from './index';
 
 /**
  * Read-side helpers.
@@ -8,7 +8,7 @@ import { getDb, type NeonDatabase } from './index';
  * the HTTP client or a transaction client without knowing which they hold.
  */
 
-export function read(): NeonDatabase {
+export function read(): DbClient {
 	return getDb();
 }
 

@@ -43,7 +43,10 @@ export default ts.config(
 		}
 	},
 	{
-		files: ['scripts/**/*.ts', 'tests/**/*.ts'],
+		// Development tooling, not request handling: progress output on a terminal
+		// is the point, and there is no user data to redact. seed-demo.ts lives
+		// under src/ only so the dev server can seed PGlite without shelling out.
+		files: ['scripts/**/*.ts', 'tests/**/*.ts', 'src/lib/server/db/seed-demo.ts'],
 		rules: { 'no-console': 'off' }
 	},
 	{

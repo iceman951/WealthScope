@@ -1,26 +1,49 @@
 import 'dotenv/config';
 import { Pool } from '@neondatabase/serverless';
 import { drizzle } from 'drizzle-orm/neon-serverless';
-import { eq } from 'drizzle-orm';
+import { eq, type ExtractTablesWithRelations } from 'drizzle-orm';
+import type { PgDatabase, PgQueryResultHKT } from 'drizzle-orm/pg-core';
 import { randomUUID } from 'node:crypto';
 import * as schema from '../../src/lib/server/db/schema/index';
+import { createPgliteDb, isPgliteUrl, migratePglite } from '../../src/lib/server/db/pglite';
 
 /**
  * Integration-test harness.
  *
  * These tests exercise the real repositories against a real PostgreSQL database.
- * They are skipped unless TEST_DATABASE_URL is set, so `pnpm test` stays runnable
- * without infrastructure — see docs/deployment.md for how to point one at a Neon
- * branch in CI.
+ * They are skipped unless TEST_DATABASE_URL is set.
+ *
+ * Set it to `memory://` to run them against a throwaway in-process PGlite
+ * database — real PostgreSQL, no infrastructure, schema built from the same
+ * migrations production uses. A postgresql:// URL points them at Neon instead;
+ * see docs/deployment.md for pointing one at a Neon branch in CI.
  */
 
 export const TEST_DATABASE_URL = process.env.TEST_DATABASE_URL;
 export const hasDatabase = Boolean(TEST_DATABASE_URL);
 
-export type TestDb = ReturnType<typeof drizzle<typeof schema>>;
+/**
+ * Driver-agnostic, and declared from `drizzle-orm/pg-core` rather than imported
+ * from `$lib/server/db` — that module reads `$env/dynamic/private`, which does
+ * not exist outside SvelteKit.
+ */
+export type TestDb = PgDatabase<
+	PgQueryResultHKT,
+	typeof schema,
+	ExtractTablesWithRelations<typeof schema>
+>;
 
-export function createTestDb(): { db: TestDb; close: () => Promise<void> } {
+export async function createTestDb(): Promise<{ db: TestDb; close: () => Promise<void> }> {
 	if (!TEST_DATABASE_URL) throw new Error('TEST_DATABASE_URL is not set.');
+
+	if (isPgliteUrl(TEST_DATABASE_URL)) {
+		// A fresh instance per suite, with the schema built from drizzle/*.sql, so
+		// the tests own their database rather than assuming a migrated one.
+		const { client, db } = await createPgliteDb(TEST_DATABASE_URL);
+		await migratePglite(db);
+		return { db, close: () => client.close() };
+	}
+
 	const pool = new Pool({ connectionString: TEST_DATABASE_URL });
 	const db = drizzle(pool, { schema, casing: 'snake_case' });
 	return { db, close: () => pool.end() };

@@ -6,6 +6,10 @@ node_modules
 /dist
 /.wrangler
 
+# Local PGlite data directory. Disposable — `pnpm db:reset` deletes it and the
+# next `pnpm dev` rebuilds the schema and demo data from scratch.
+/.pglite
+
 .env
 .env.*
 !.env.example

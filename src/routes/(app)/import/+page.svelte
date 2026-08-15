@@ -236,8 +236,7 @@
 					bind:value={csvText}
 					oninput={() => {
 						fileName = fileName || 'pasted.csv';
-					}}
-				></textarea>
+					}}></textarea>
 			</details>
 
 			{#if parsing}

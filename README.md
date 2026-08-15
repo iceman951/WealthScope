@@ -104,7 +104,8 @@ More in [`docs/architecture.md`](docs/architecture.md).
 
 - Node.js 22 or later
 - pnpm 10 or later
-- A Neon PostgreSQL project (the free tier is enough)
+- A Neon PostgreSQL project — **only to deploy**. Local development runs on
+  PGlite and needs no database service and no network.
 - A Cloudflare account, to deploy
 
 ---
@@ -123,17 +124,51 @@ pnpm install
 cp .env.example .env
 ```
 
-| Variable                  | Required | Notes                                                  |
-| ------------------------- | -------- | ------------------------------------------------------ |
-| `DATABASE_URL`            | yes      | Neon **pooled** connection string (the `-pooler` host) |
-| `BETTER_AUTH_SECRET`      | yes      | Session signing key — `openssl rand -base64 32`        |
-| `BETTER_AUTH_URL`         | yes      | Public origin; must match the browser origin exactly   |
-| `PUBLIC_APP_NAME`         | no       | Defaults to `WealthScope`                              |
-| `PUBLIC_DEFAULT_LOCALE`   | no       | Defaults to `th-TH`                                    |
-| `PUBLIC_DEFAULT_CURRENCY` | no       | Defaults to `THB`                                      |
-| `TEST_DATABASE_URL`       | no       | Integration tests skip themselves without it           |
+| Variable                  | Required | Notes                                                      |
+| ------------------------- | -------- | ---------------------------------------------------------- |
+| `DATABASE_URL`            | yes      | Selects the driver — see the table below                   |
+| `BETTER_AUTH_SECRET`      | yes      | Session signing key — `openssl rand -base64 32`            |
+| `BETTER_AUTH_URL`         | yes      | Public origin; must match the browser origin exactly       |
+| `PUBLIC_APP_NAME`         | no       | Defaults to `WealthScope`                                  |
+| `PUBLIC_DEFAULT_LOCALE`   | no       | Defaults to `th-TH`                                        |
+| `PUBLIC_DEFAULT_CURRENCY` | no       | Defaults to `THB`                                          |
+| `TEST_DATABASE_URL`       | no       | `memory://` runs the integration suite with no external DB |
 
 `.env` is gitignored. Never commit real credentials.
+
+---
+
+## Which database
+
+The shape of `DATABASE_URL` picks the driver. Nothing else changes — PGlite _is_
+PostgreSQL, so one schema and one set of migrations serve both.
+
+| `DATABASE_URL`   | Driver | Use                                                     |
+| ---------------- | ------ | ------------------------------------------------------- |
+| `file:./.pglite` | PGlite | Local development. Persists across restarts.            |
+| `memory://`      | PGlite | Integration tests. Discarded on exit.                   |
+| `postgresql://…` | Neon   | Production, and local work against the remote database. |
+
+**PGlite** is PostgreSQL 17 compiled to WebAssembly, running inside the dev
+server's own process. It needs no service, no container and no network, and it
+starts the schema from `drizzle/*.sql` unmodified — exact `numeric`, the CHECK
+constraints, the POSIX regex operators and `gen_random_uuid()` all behave as they
+do on Neon, so nothing is "close enough for development".
+
+On first boot it creates the schema and seeds the demo household automatically.
+Two consequences worth knowing:
+
+- It is one process holding an exclusive lock on `./.pglite`. Stop `pnpm dev`
+  before running `pnpm db:seed`, `db:push`, `db:migrate` or `db:studio`.
+- `pnpm preview` is `wrangler dev`, which runs on workerd and cannot load PGlite.
+  Point `DATABASE_URL` at Neon before previewing the Worker build. (Playwright's
+  `vite preview` runs on Node and works with either.)
+
+`pnpm db:reset` deletes `./.pglite`; the next `pnpm dev` rebuilds it from scratch.
+
+The predicate is the URL, deliberately, and not `dev` from `$app/environment` —
+`vite preview` reports `dev` as false while still reading `.env`, so gating on it
+would silently send the end-to-end tests to Neon.
 
 ---
 
@@ -191,11 +226,16 @@ The script refuses to run when `NODE_ENV=production` or when `DATABASE_URL` cont
 ## Local development
 
 ```bash
-pnpm dev             # http://localhost:5173
+pnpm dev             # http://localhost:5555
 pnpm check           # svelte-check, strict TypeScript
 pnpm lint            # prettier --check + eslint
 pnpm format          # prettier --write
+pnpm db:reset        # delete the local PGlite database; next `dev` rebuilds it
 ```
+
+On a PGlite `DATABASE_URL` the first request builds the schema and seeds the demo
+account, which takes a few seconds. Every request after that is served from
+memory — no network round trip to a database at all.
 
 ---
 
@@ -210,6 +250,11 @@ pnpm test:e2e        # Playwright (builds and previews first)
 **Unit tests** (237, no infrastructure needed) cover the money helpers, currency conversion, net worth, allocation, cash flow, debt, returns, risk, projection, the health score, the findings rules, every Zod schema, CSV mapping, duplicate detection and CSV export safety — including zero, negative, very large and many-decimal values, missing exchange rates, mixed currencies, empty portfolios, division by zero and partial history.
 
 **Integration tests** run against a real PostgreSQL database and are **skipped unless `TEST_DATABASE_URL` is set**. They cover repository queries, exact numeric round-tripping, snapshot upserts and — the central claim — that no repository method reaches another user's row, whatever id it is handed.
+
+`.env.example` sets `TEST_DATABASE_URL=memory://`, which runs them against a
+throwaway PGlite instance that migrates itself: real PostgreSQL, no infrastructure,
+about two seconds for the whole suite. Point it at a scratch Neon branch instead
+when you want to verify the hosted driver:
 
 ```bash
 TEST_DATABASE_URL="postgresql://..." pnpm test

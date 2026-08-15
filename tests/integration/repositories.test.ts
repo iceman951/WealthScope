@@ -31,7 +31,7 @@ suite('repositories (integration)', () => {
 	let mallory: TestUser;
 
 	beforeAll(async () => {
-		({ db, close } = createTestDb());
+		({ db, close } = await createTestDb());
 		alice = await createTestUser(db, 'alice');
 		mallory = await createTestUser(db, 'mallory');
 	}, 30_000);
@@ -108,7 +108,9 @@ suite('repositories (integration)', () => {
 				},
 				db
 			);
-			expect(updated).toBeUndefined();
+			// `updateAccount` returns `rows[0] ?? null`, so a row belonging to
+			// somebody else is reported as not found rather than as a refusal.
+			expect(updated).toBeNull();
 
 			expect(await accountsRepo.deleteAccount(mallory.id, created.id, db)).toBe(false);
 
