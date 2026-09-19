@@ -20,7 +20,8 @@ declare global {
 
 		interface Platform {
 			env?: {
-				DATABASE_URL?: string;
+				/** The D1 database, bound as `DB` in wrangler.jsonc. */
+				DB: D1Database;
 				BETTER_AUTH_SECRET?: string;
 				BETTER_AUTH_URL?: string;
 			};

@@ -13,6 +13,9 @@ export interface ShellSummary {
 }
 
 export async function shellSummary(userId: string, db: DbClient = read()): Promise<ShellSummary> {
+	// Timestamps are epoch milliseconds in SQLite, so the multi-argument scalar
+	// `max()` picks the latest and the ISO conversion happens here, not in SQL.
+	// SQLite's `max()` returns NULL if any argument is NULL, hence the coalesces.
 	const rows = await db
 		.select({
 			recordCount: sql<number>`(
@@ -20,18 +23,19 @@ export async function shellSummary(userId: string, db: DbClient = read()): Promi
 				(select count(*) from ${liabilities} where ${liabilities.userId} = ${userId}) +
 				(select count(*) from ${cashflowEntries} where ${cashflowEntries.userId} = ${userId}) +
 				(select count(*) from ${transactions} where ${transactions.userId} = ${userId})
-			)::int`,
-			lastUpdated: sql<string | null>`greatest(
-				(select max(${assets.updatedAt}) from ${assets} where ${assets.userId} = ${userId}),
-				(select max(${liabilities.updatedAt}) from ${liabilities} where ${liabilities.userId} = ${userId}),
-				(select max(${cashflowEntries.updatedAt}) from ${cashflowEntries} where ${cashflowEntries.userId} = ${userId}),
-				(select max(${transactions.updatedAt}) from ${transactions} where ${transactions.userId} = ${userId})
-			)::text`
+			)`,
+			lastUpdated: sql<number>`max(
+				coalesce((select max(${assets.updatedAt}) from ${assets} where ${assets.userId} = ${userId}), 0),
+				coalesce((select max(${liabilities.updatedAt}) from ${liabilities} where ${liabilities.userId} = ${userId}), 0),
+				coalesce((select max(${cashflowEntries.updatedAt}) from ${cashflowEntries} where ${cashflowEntries.userId} = ${userId}), 0),
+				coalesce((select max(${transactions.updatedAt}) from ${transactions} where ${transactions.userId} = ${userId}), 0)
+			)`
 		})
 		.from(sql`(select 1) as one`);
 
+	const latest = Number(rows[0]?.lastUpdated ?? 0);
 	return {
-		recordCount: rows[0]?.recordCount ?? 0,
-		lastUpdated: rows[0]?.lastUpdated ?? null
+		recordCount: Number(rows[0]?.recordCount ?? 0),
+		lastUpdated: latest > 0 ? new Date(latest).toISOString() : null
 	};
 }

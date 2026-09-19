@@ -1,52 +1,38 @@
-import 'dotenv/config';
-import { Pool } from '@neondatabase/serverless';
-import { drizzle } from 'drizzle-orm/neon-serverless';
-import { eq, type ExtractTablesWithRelations } from 'drizzle-orm';
-import type { PgDatabase, PgQueryResultHKT } from 'drizzle-orm/pg-core';
+import { eq } from 'drizzle-orm';
+import { migrate } from 'drizzle-orm/d1/migrator';
 import { randomUUID } from 'node:crypto';
+import { resolve } from 'node:path';
+import { getPlatformProxy } from 'wrangler';
+import { createDb, type DbClient } from '../../src/lib/server/db/index';
 import * as schema from '../../src/lib/server/db/schema/index';
-import { createPgliteDb, isPgliteUrl, migratePglite } from '../../src/lib/server/db/pglite';
 
 /**
  * Integration-test harness.
  *
- * These tests exercise the real repositories against a real PostgreSQL database.
- * They are skipped unless TEST_DATABASE_URL is set.
+ * These tests exercise the real repositories against a real D1 database: the
+ * same workerd runtime and SQLite engine that `wrangler dev` uses, obtained
+ * through wrangler's platform proxy with persistence switched off. Every suite
+ * gets a throwaway database built from `drizzle/*.sql` — the migrations
+ * production runs, unmodified — so no infrastructure and no network is needed
+ * and the tests own their schema rather than assuming a migrated one.
  *
- * Set it to `memory://` to run them against a throwaway in-process PGlite
- * database — real PostgreSQL, no infrastructure, schema built from the same
- * migrations production uses. A postgresql:// URL points them at Neon instead;
- * see docs/deployment.md for pointing one at a Neon branch in CI.
+ * Set `SKIP_INTEGRATION=1` to leave them out of a run.
  */
 
-export const TEST_DATABASE_URL = process.env.TEST_DATABASE_URL;
-export const hasDatabase = Boolean(TEST_DATABASE_URL);
+export const hasDatabase = !process.env.SKIP_INTEGRATION;
 
 /**
- * Driver-agnostic, and declared from `drizzle-orm/pg-core` rather than imported
- * from `$lib/server/db` — that module reads `$env/dynamic/private`, which does
- * not exist outside SvelteKit.
+ * `DbClient` is re-exported under the name the tests already use. It comes from
+ * `$lib/server/db`, which imports nothing from SvelteKit, so the same type
+ * serves inside and outside the app.
  */
-export type TestDb = PgDatabase<
-	PgQueryResultHKT,
-	typeof schema,
-	ExtractTablesWithRelations<typeof schema>
->;
+export type TestDb = DbClient;
 
 export async function createTestDb(): Promise<{ db: TestDb; close: () => Promise<void> }> {
-	if (!TEST_DATABASE_URL) throw new Error('TEST_DATABASE_URL is not set.');
-
-	if (isPgliteUrl(TEST_DATABASE_URL)) {
-		// A fresh instance per suite, with the schema built from drizzle/*.sql, so
-		// the tests own their database rather than assuming a migrated one.
-		const { client, db } = await createPgliteDb(TEST_DATABASE_URL);
-		await migratePglite(db);
-		return { db, close: () => client.close() };
-	}
-
-	const pool = new Pool({ connectionString: TEST_DATABASE_URL });
-	const db = drizzle(pool, { schema, casing: 'snake_case' });
-	return { db, close: () => pool.end() };
+	const proxy = await getPlatformProxy<{ DB: D1Database }>({ persist: false });
+	const db = createDb(proxy.env.DB);
+	await migrate(db, { migrationsFolder: resolve(process.cwd(), 'drizzle') });
+	return { db, close: () => proxy.dispose() };
 }
 
 export interface TestUser {

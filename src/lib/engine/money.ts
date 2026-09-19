@@ -4,8 +4,8 @@ import { ZERO_DECIMAL_CURRENCIES } from '$lib/types/domain';
 /**
  * Exact money arithmetic.
  *
- * Every canonical figure in WealthScope is a Decimal built from the exact string
- * PostgreSQL returned for a `numeric` column. Binary floating point is never used
+ * Every canonical figure in WealthScope is a Decimal built from the exact decimal
+ * string the database stored. Binary floating point is never used
  * for a persisted or reported value; `number` appears only where a value is on its
  * way to a CSS width or an SVG coordinate.
  *

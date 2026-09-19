@@ -26,7 +26,10 @@ export async function registerAndOnboard(page: Page, label: string): Promise<Tes
 	await page.goto('/register');
 	await page.getByLabel('Name').fill(account.name);
 	await page.getByLabel('Email').fill(account.email);
-	await page.getByLabel('Password', { exact: true }).fill(account.password);
+	// Anchored rather than exact: FormField appends a visually-hidden "(required)"
+	// to the label, so a required field's accessible name is never the bare label.
+	// "Confirm password" does not start with "Password", so this stays unambiguous.
+	await page.getByLabel(/^Password/).fill(account.password);
 	await page.getByLabel('Confirm password').fill(account.password);
 	await page.getByRole('button', { name: 'Create account' }).click();
 
@@ -53,6 +56,27 @@ export async function signOut(page: Page): Promise<void> {
 	await page.goto('/settings');
 	await page.getByRole('button', { name: 'Sign out of this browser' }).click();
 	await page.waitForURL('**/login**');
+}
+
+/**
+ * Adds one account through the dialog on /accounts.
+ *
+ * A transaction needs one: the Account field is required, and a freshly
+ * onboarded user has none.
+ */
+export async function addAccount(
+	page: Page,
+	options: { name: string; type?: string; currency?: string }
+): Promise<void> {
+	await page.goto('/accounts');
+	await page.getByRole('button', { name: 'Add account' }).first().click();
+
+	const dialog = page.getByRole('dialog');
+	await dialog.getByLabel('Name').fill(options.name);
+	if (options.type) await dialog.getByLabel('Type').selectOption(options.type);
+	if (options.currency) await dialog.getByLabel('Currency').selectOption(options.currency);
+	await dialog.getByRole('button', { name: 'Save account' }).click();
+	await dialog.waitFor({ state: 'detached' });
 }
 
 /** Adds one asset through the dialog on /assets. */

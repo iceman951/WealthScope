@@ -1,22 +1,33 @@
 # Deployment
 
-Target: Cloudflare Workers with static assets, backed by Neon PostgreSQL.
+Target: Cloudflare Workers with static assets, backed by Cloudflare D1.
 
-## 1. Neon
+## 1. D1
 
-1. Create a project in **`ap-southeast-1` (Singapore)** — closest to Thailand,
-   which is where the default locale points.
-2. Copy the **pooled** connection string. The host contains `-pooler`; the direct
-   string will exhaust connections under Worker concurrency.
-3. Apply the migrations:
+Create the database once and record its id:
 
 ```bash
-DATABASE_URL="postgresql://…-pooler.ap-southeast-1.aws.neon.tech/wealthscope?sslmode=require" \
-  pnpm db:migrate
+wrangler d1 create wealthscope
 ```
 
-Neon branches are useful here: branch `main` for a staging database and point
-`TEST_DATABASE_URL` at it in CI.
+Paste the printed `database_id` into `wrangler.jsonc` under `d1_databases`
+(the placeholder id is only there so local development works before the real
+database exists). D1 picks its primary location from where you run the command;
+run it from the region closest to your users, or pass `--location apac`.
+
+Then build the schema:
+
+```bash
+pnpm db:migrate:remote      # wrangler d1 migrations apply wealthscope --remote
+```
+
+That applies every `drizzle/*.sql` file wrangler has not yet recorded in the
+database's `d1_migrations` table. It is idempotent, so it belongs in the pipeline
+before every deploy.
+
+A staging environment is a second database: create it, add a
+`[env.staging]` block in `wrangler.jsonc` with its own `d1_databases` entry, and
+deploy with `--env staging`.
 
 ## 2. Cloudflare
 
@@ -30,32 +41,40 @@ Neon branches are useful here: branch `main` for a staging database and point
   "compatibility_flags": ["nodejs_compat"],
   "assets": { "binding": "ASSETS", "directory": ".svelte-kit/cloudflare" },
   "observability": { "enabled": true },
+  "d1_databases": [
+    { "binding": "DB", "database_name": "wealthscope", "database_id": "…", "migrations_dir": "drizzle" }
+  ],
   "vars": { "PUBLIC_APP_NAME": "WealthScope", … },
   "placement": { "mode": "smart" }
 }
 ```
 
-Two settings matter:
+Three settings matter:
 
-- **`nodejs_compat`** is required. `@neondatabase/serverless` needs `node:events`
-  and `node:buffer`; pdf-lib needs `node:buffer` during report generation.
-- **`placement: smart`** runs the Worker near Neon rather than near the visitor.
-  Every protected page makes several database round trips, so proximity to the
+- **`d1_databases`** is the database. The application reads it as
+  `platform.env.DB`; there is no connection string anywhere. `migrations_dir`
+  points wrangler at the folder Drizzle writes to, so one set of SQL serves both
+  tools.
+- **`nodejs_compat`** is required by pdf-lib (`node:buffer`) during report
+  generation, and by the demo seed's `node:crypto` (development only).
+- **`placement: smart`** lets the runtime move the Worker next to the database.
+  Every protected page makes several D1 round trips, so proximity to the
   database dominates the response time.
+
+After changing bindings, regenerate the runtime types the type-checker uses:
+`pnpm cf:types` (also run by `pnpm install` through `prepare`).
 
 ## 3. Secrets
 
 Never in `wrangler.jsonc`. Set once per environment:
 
 ```bash
-wrangler secret put DATABASE_URL
 wrangler secret put BETTER_AUTH_SECRET
 wrangler secret put BETTER_AUTH_URL
 ```
 
 | Secret               | Value                                             |
 | -------------------- | ------------------------------------------------- |
-| `DATABASE_URL`       | Neon pooled connection string                     |
 | `BETTER_AUTH_SECRET` | `openssl rand -base64 32`                         |
 | `BETTER_AUTH_URL`    | The public origin, e.g. `https://wealthscope.app` |
 
@@ -81,7 +100,11 @@ pnpm preview     # wrangler dev
 ```
 
 This runs the real Worker runtime, not Vite's dev server, which is where
-runtime-compatibility problems surface.
+runtime-compatibility problems surface. It uses the same local D1 database as
+`pnpm dev` (under `.wrangler/state`), so the demo household is already there.
+Note that it listens on port 8787 while `.env` names port 5555 in
+`BETTER_AUTH_URL`; sign-in through the preview needs that variable pointed at
+the preview origin, or a `.dev.vars` file that overrides it.
 
 ## 5. Suggested pipeline
 
@@ -89,16 +112,18 @@ runtime-compatibility problems surface.
 - pnpm install --frozen-lockfile
 - pnpm check # svelte-check, strict TypeScript
 - pnpm lint # prettier --check + eslint
-- pnpm test # unit; integration if TEST_DATABASE_URL is set
+- pnpm test # unit + integration (the latter on a throwaway in-memory D1)
 - pnpm build
 - pnpm exec playwright install --with-deps chromium
-- pnpm test:e2e # needs a scratch database
-- pnpm db:migrate # against production, before the deploy
+- pnpm db:migrate && pnpm test:e2e # e2e runs against the local D1
+- pnpm db:migrate:remote # against production, before the deploy
 - pnpm deploy
 ```
 
-Run `db:migrate` **before** `deploy`. The new Worker expects the new schema; the
-old one tolerates additive changes.
+Run `db:migrate:remote` **before** `deploy`. The new Worker expects the new
+schema; the old one tolerates additive changes. The pipeline needs
+`CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` for the remote steps and
+nothing for the local ones.
 
 ## 6. Custom domain
 
@@ -125,9 +150,14 @@ Useful queries:
 - **Cloudflare R2** is not used. Uploaded CSV files are parsed in memory and
   discarded; there is nothing to retain. Add R2 only if retaining source files
   becomes a requirement, and never for relational financial data.
-- **Cloudflare D1** is not used as the primary database. The financial schema
-  needs `numeric` with 24–30 digits of precision and real transactions; SQLite's
-  numeric affinity would silently convert those to floats.
+- **Cloudflare D1** is the primary database. SQLite has no arbitrary-precision
+  numeric, so every financial value is stored as an exact decimal `text` and the
+  engine does the arithmetic in `Decimal`; D1 has no interactive transactions,
+  so multi-statement writes go through atomic `batch()` calls. Both decisions
+  and their limits are in [`database.md`](database.md).
+- **Backups.** D1 keeps 30 days of point-in-time history on paid plans
+  (`wrangler d1 time-travel`); `wrangler d1 export wealthscope --remote
+--output backup.sql` takes a portable dump.
 
 ## 9. Rollback
 
@@ -140,7 +170,8 @@ wrangler rollback [deployment-id]
 
 Migrations do not roll back automatically. Keep them additive where possible —
 add a column, backfill, then drop in a later release — so a Worker rollback stays
-safe.
+safe. For a data rollback, `wrangler d1 time-travel restore wealthscope
+--timestamp <ISO>` rewinds the database itself.
 
 ## 10. Post-deploy checks
 

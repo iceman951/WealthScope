@@ -177,9 +177,10 @@ suite('repositories (integration)', () => {
 			);
 			expect(result).toBeNull();
 
-			// And the holding's own valuation is unchanged.
+			// And the holding's own valuation is unchanged. Decimal strings are stored
+			// as given — SQLite has no numeric scale to pad them to.
 			const unchanged = await assetsRepo.findAsset(alice.id, asset.id, db);
-			expect(unchanged?.unitPrice).toBe('100.00000000');
+			expect(unchanged?.unitPrice).toBe('100');
 		});
 
 		it('records a price and revalues the holding for its owner', async () => {

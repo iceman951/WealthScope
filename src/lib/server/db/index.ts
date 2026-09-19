@@ -1,57 +1,61 @@
-import { neon } from '@neondatabase/serverless';
-import { drizzle } from 'drizzle-orm/neon-http';
-import type { ExtractTablesWithRelations } from 'drizzle-orm';
-import type { PgDatabase, PgQueryResultHKT } from 'drizzle-orm/pg-core';
-import { env } from '$env/dynamic/private';
+import { drizzle, type DrizzleD1Database } from 'drizzle-orm/d1';
 import * as schema from './schema';
-import { isPgliteUrl, pgliteDb } from './pglite';
 
 /**
  * Server-only database module.
  *
- * Two drivers sit behind one entry point, chosen by the shape of DATABASE_URL:
+ * One driver: Cloudflare D1 over Drizzle. The database is a Worker binding, not
+ * a connection string — there is nothing to connect to and nothing to hold
+ * open. The same binding serves every environment:
  *
- *   postgresql://…   Neon. Reads and single-statement writes go over the HTTP
- *                    driver — no connection to hold open, which is what a
- *                    Cloudflare Worker wants. Multi-statement financial writes
- *                    go through `withTransaction()` in ./transaction.ts.
- *   file:./.pglite   PGlite, for local development. Real PostgreSQL compiled to
- *   memory://        WebAssembly, in this process. See ./pglite.ts.
+ *   vite dev / vite preview   adapter-cloudflare emulates `platform.env` through
+ *                             wrangler's getPlatformProxy, so `DB` is a local
+ *                             SQLite file under .wrangler/state. No service to
+ *                             start, and the data survives restarts.
+ *   wrangler dev              the same local database, on workerd.
+ *   wrangler deploy           the real D1 database named in wrangler.jsonc.
  *
- * The predicate is the URL rather than `dev` from `$app/environment`, because
- * `vite preview` — which Playwright builds and runs against — reports `dev` as
- * false while still reading .env, and would silently fall through to Neon.
- *
- * DATABASE_URL is read from `$env/dynamic/private`, so it resolves from the
- * Worker's secrets at request time and never reaches a client bundle.
+ * This module imports nothing from SvelteKit, so `scripts/seed.ts` under tsx and
+ * `tests/integration/setup.ts` under Vitest can build a client from a binding
+ * they obtained themselves.
  */
 
 /**
- * What a repository accepts: the Neon client, the PGlite client, or a transaction
- * client. All are `PgDatabase`s over the same schema, so a repository method
- * works identically across drivers and inside or outside a transaction.
+ * What a repository accepts. There is exactly one client type — D1 has no
+ * interactive transactions, so there is no separate transaction client; see
+ * ./batch.ts for how multi-statement writes stay atomic.
  */
-export type DbClient = PgDatabase<
-	PgQueryResultHKT,
-	typeof schema,
-	ExtractTablesWithRelations<typeof schema>
->;
+export type DbClient = DrizzleD1Database<typeof schema>;
 
-let cached: DbClient | null = null;
-let cachedUrl: string | null = null;
-
-function createDb(connectionString: string): DbClient {
-	return drizzle(neon(connectionString), { schema, casing: 'snake_case' });
+/**
+ * Wraps a D1 binding in Drizzle.
+ *
+ * `casing: 'snake_case'` is load-bearing: the schema declares camelCase
+ * properties against snake_case columns, and a client configured differently
+ * would emit `"userId"` against a `user_id` column.
+ */
+export function createDb(binding: D1Database): DbClient {
+	return drizzle(binding, { schema, casing: 'snake_case' });
 }
 
-export function databaseUrl(): string {
-	const url = env.DATABASE_URL;
-	if (!url) {
-		throw new Error(
-			'DATABASE_URL is not configured. Set it in .env locally, or as a Worker secret in production.'
-		);
+let boundTo: D1Database | null = null;
+let cached: DbClient | null = null;
+
+/**
+ * Records the request's D1 binding so `getDb()` can hand it out synchronously.
+ *
+ * Called from `handleDatabase` in src/hooks.server.ts before anything touches
+ * the database. Bindings are per deployment, not per request — every request an
+ * isolate serves sees the same `DB` object — so parking it at module scope is
+ * safe, and the Drizzle client is only rebuilt if the object changes (isolate
+ * reuse across a preview/production boundary, or a test swapping databases).
+ */
+export function bindDatabase(binding: D1Database): DbClient {
+	if (!cached || boundTo !== binding) {
+		cached = createDb(binding);
+		boundTo = binding;
 	}
-	return url;
+	return cached;
 }
 
 /**
@@ -59,21 +63,14 @@ export function databaseUrl(): string {
  *
  * Synchronous, and it must stay that way: `read()` calls it as a default
  * parameter value at some sixty repository call sites, and a default parameter
- * cannot be awaited. PGlite's asynchronous bootstrap therefore runs ahead of the
- * request in `handleDatabase` (src/hooks.server.ts), and `pgliteDb()` only hands
- * back the instance that bootstrap already built.
- *
- * The Neon client is built lazily, because `$env/dynamic/private` is only
- * populated once the Worker has a request context, and re-built if the URL
- * changes between isolate reuses (preview vs production bindings).
+ * cannot be awaited. The binding therefore arrives ahead of the request in
+ * `handleDatabase`, and this only hands back what that already built.
  */
 export function getDb(): DbClient {
-	const url = databaseUrl();
-	if (isPgliteUrl(url)) return pgliteDb();
-
-	if (!cached || cachedUrl !== url) {
-		cached = createDb(url);
-		cachedUrl = url;
+	if (!cached) {
+		throw new Error(
+			'The D1 binding is not attached. bindDatabase() must run before getDb() — check that handleDatabase is still in the hooks.server.ts chain, and that wrangler.jsonc declares the "DB" d1_databases binding.'
+		);
 	}
 	return cached;
 }

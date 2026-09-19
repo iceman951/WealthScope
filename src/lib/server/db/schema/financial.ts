@@ -1,19 +1,13 @@
 import { sql } from 'drizzle-orm';
 import {
-	boolean,
 	check,
-	date,
 	index,
 	integer,
-	jsonb,
-	pgTable,
+	sqliteTable,
 	text,
-	timestamp,
 	uniqueIndex,
-	uuid,
-	varchar,
-	type AnyPgColumn
-} from 'drizzle-orm/pg-core';
+	type AnySQLiteColumn
+} from 'drizzle-orm/sqlite-core';
 import {
 	ACCOUNT_TYPES,
 	ASSET_TYPES,
@@ -35,14 +29,19 @@ import {
 	createdAt,
 	currency,
 	fxRate,
+	instant,
 	isCurrencyCode,
 	isNonNegative,
+	isoDate,
+	isPositive,
 	money,
 	oneOf,
 	price,
 	quantity,
 	rate,
-	updatedAt
+	updatedAt,
+	uuid,
+	uuidPrimaryKey
 } from './columns';
 
 /**
@@ -56,19 +55,19 @@ import {
  *               be deleted until the history is dealt with explicitly.
  */
 
-export const financialAccounts = pgTable(
+export const financialAccounts = sqliteTable(
 	'financial_accounts',
 	{
-		id: uuid('id').primaryKey().defaultRandom(),
+		id: uuidPrimaryKey(),
 		userId: text('user_id')
 			.notNull()
 			.references(() => user.id, { onDelete: 'cascade' }),
-		name: varchar('name', { length: 160 }).notNull(),
+		name: text('name', { length: 160 }).notNull(),
 		accountType: text('account_type').notNull(),
-		institution: varchar('institution', { length: 160 }),
+		institution: text('institution', { length: 160 }),
 		currency: currency().notNull(),
 		description: text('description'),
-		isActive: boolean('is_active').notNull().default(true),
+		isActive: integer('is_active', { mode: 'boolean' }).notNull().default(true),
 		createdAt: createdAt(),
 		updatedAt: updatedAt()
 	},
@@ -81,17 +80,17 @@ export const financialAccounts = pgTable(
 	]
 );
 
-export const assets = pgTable(
+export const assets = sqliteTable(
 	'assets',
 	{
-		id: uuid('id').primaryKey().defaultRandom(),
+		id: uuidPrimaryKey(),
 		userId: text('user_id')
 			.notNull()
 			.references(() => user.id, { onDelete: 'cascade' }),
 		accountId: uuid('account_id').references(() => financialAccounts.id, { onDelete: 'set null' }),
-		name: varchar('name', { length: 160 }).notNull(),
+		name: text('name', { length: 160 }).notNull(),
 		assetType: text('asset_type').notNull(),
-		symbol: varchar('symbol', { length: 32 }),
+		symbol: text('symbol', { length: 32 }),
 		currency: currency().notNull(),
 		quantity: quantity('quantity').notNull().default('1'),
 		unitPrice: price('unit_price').notNull().default('0'),
@@ -110,7 +109,7 @@ export const assets = pgTable(
 		 * an edit and so the form can derive the total from what was actually paid.
 		 */
 		acquisitionFees: money('acquisition_fees'),
-		valuationDate: date('valuation_date').notNull(),
+		valuationDate: isoDate('valuation_date').notNull(),
 		notes: text('notes'),
 		createdAt: createdAt(),
 		updatedAt: updatedAt()
@@ -130,10 +129,10 @@ export const assets = pgTable(
 	]
 );
 
-export const transactions = pgTable(
+export const transactions = sqliteTable(
 	'transactions',
 	{
-		id: uuid('id').primaryKey().defaultRandom(),
+		id: uuidPrimaryKey(),
 		userId: text('user_id')
 			.notNull()
 			.references(() => user.id, { onDelete: 'cascade' }),
@@ -142,7 +141,7 @@ export const transactions = pgTable(
 			.references(() => financialAccounts.id, { onDelete: 'restrict' }),
 		assetId: uuid('asset_id').references(() => assets.id, { onDelete: 'restrict' }),
 		transactionType: text('transaction_type').notNull(),
-		transactionDate: date('transaction_date').notNull(),
+		transactionDate: isoDate('transaction_date').notNull(),
 		quantity: quantity('quantity'),
 		unitPrice: price('unit_price'),
 		grossAmount: money('gross_amount').notNull(),
@@ -153,7 +152,7 @@ export const transactions = pgTable(
 		exchangeRate: fxRate('exchange_rate'),
 		notes: text('notes'),
 		/** Set when the row came from a CSV import; used for duplicate detection. */
-		importBatchId: uuid('import_batch_id').references((): AnyPgColumn => importBatches.id, {
+		importBatchId: uuid('import_batch_id').references((): AnySQLiteColumn => importBatches.id, {
 			onDelete: 'set null'
 		}),
 		createdAt: createdAt(),
@@ -173,15 +172,15 @@ export const transactions = pgTable(
 	]
 );
 
-export const liabilities = pgTable(
+export const liabilities = sqliteTable(
 	'liabilities',
 	{
-		id: uuid('id').primaryKey().defaultRandom(),
+		id: uuidPrimaryKey(),
 		userId: text('user_id')
 			.notNull()
 			.references(() => user.id, { onDelete: 'cascade' }),
 		accountId: uuid('account_id').references(() => financialAccounts.id, { onDelete: 'set null' }),
-		name: varchar('name', { length: 160 }).notNull(),
+		name: text('name', { length: 160 }).notNull(),
 		liabilityType: text('liability_type').notNull(),
 		currency: currency().notNull(),
 		originalPrincipal: money('original_principal').notNull(),
@@ -190,8 +189,8 @@ export const liabilities = pgTable(
 		interestRate: rate('interest_rate').notNull(),
 		minimumPayment: money('minimum_payment'),
 		monthlyPayment: money('monthly_payment'),
-		startDate: date('start_date'),
-		maturityDate: date('maturity_date'),
+		startDate: isoDate('start_date'),
+		maturityDate: isoDate('maturity_date'),
 		notes: text('notes'),
 		createdAt: createdAt(),
 		updatedAt: updatedAt()
@@ -210,23 +209,23 @@ export const liabilities = pgTable(
 	]
 );
 
-export const cashflowEntries = pgTable(
+export const cashflowEntries = sqliteTable(
 	'cashflow_entries',
 	{
-		id: uuid('id').primaryKey().defaultRandom(),
+		id: uuidPrimaryKey(),
 		userId: text('user_id')
 			.notNull()
 			.references(() => user.id, { onDelete: 'cascade' }),
 		entryType: text('entry_type').notNull(),
 		category: text('category').notNull(),
-		name: varchar('name', { length: 160 }).notNull(),
+		name: text('name', { length: 160 }).notNull(),
 		/** Always stored positive; direction comes from `entryType`. */
 		amount: money('amount').notNull(),
 		currency: currency().notNull(),
 		frequency: text('frequency').notNull(),
-		entryDate: date('entry_date').notNull(),
-		endDate: date('end_date'),
-		isRecurring: boolean('is_recurring').notNull().default(true),
+		entryDate: isoDate('entry_date').notNull(),
+		endDate: isoDate('end_date'),
+		isRecurring: integer('is_recurring', { mode: 'boolean' }).notNull().default(true),
 		notes: text('notes'),
 		createdAt: createdAt(),
 		updatedAt: updatedAt()
@@ -244,16 +243,16 @@ export const cashflowEntries = pgTable(
 	]
 );
 
-export const assetPrices = pgTable(
+export const assetPrices = sqliteTable(
 	'asset_prices',
 	{
-		id: uuid('id').primaryKey().defaultRandom(),
+		id: uuidPrimaryKey(),
 		assetId: uuid('asset_id')
 			.notNull()
 			.references(() => assets.id, { onDelete: 'cascade' }),
 		price: price('price').notNull(),
 		currency: currency().notNull(),
-		priceDate: date('price_date').notNull(),
+		priceDate: isoDate('price_date').notNull(),
 		source: text('source').notNull().default('manual'),
 		createdAt: createdAt()
 	},
@@ -266,15 +265,15 @@ export const assetPrices = pgTable(
 	]
 );
 
-export const exchangeRates = pgTable(
+export const exchangeRates = sqliteTable(
 	'exchange_rates',
 	{
-		id: uuid('id').primaryKey().defaultRandom(),
+		id: uuidPrimaryKey(),
 		baseCurrency: currency('base_currency').notNull(),
 		quoteCurrency: currency('quote_currency').notNull(),
 		/** 1 base = `rate` quote. */
 		rate: fxRate('rate').notNull(),
-		rateDate: date('rate_date').notNull(),
+		rateDate: isoDate('rate_date').notNull(),
 		source: text('source').notNull().default('manual'),
 		createdAt: createdAt()
 	},
@@ -292,18 +291,18 @@ export const exchangeRates = pgTable(
 		),
 		check('exchange_rates_base_chk', isCurrencyCode('base_currency')),
 		check('exchange_rates_quote_chk', isCurrencyCode('quote_currency')),
-		check('exchange_rates_rate_chk', sql`rate > 0`)
+		check('exchange_rates_rate_chk', isPositive('rate'))
 	]
 );
 
-export const portfolioSnapshots = pgTable(
+export const portfolioSnapshots = sqliteTable(
 	'portfolio_snapshots',
 	{
-		id: uuid('id').primaryKey().defaultRandom(),
+		id: uuidPrimaryKey(),
 		userId: text('user_id')
 			.notNull()
 			.references(() => user.id, { onDelete: 'cascade' }),
-		snapshotDate: date('snapshot_date').notNull(),
+		snapshotDate: isoDate('snapshot_date').notNull(),
 		baseCurrency: currency('base_currency').notNull(),
 		totalAssets: money('total_assets').notNull(),
 		totalLiabilities: money('total_liabilities').notNull(),
@@ -311,7 +310,7 @@ export const portfolioSnapshots = pgTable(
 		liquidAssets: money('liquid_assets').notNull(),
 		investmentAssets: money('investment_assets').notNull(),
 		/** Allocation breakdown and the FX rates used, so a snapshot stays reproducible. */
-		metadataJson: jsonb('metadata_json'),
+		metadataJson: text('metadata_json', { mode: 'json' }),
 		createdAt: createdAt()
 	},
 	(table) => [
@@ -321,19 +320,19 @@ export const portfolioSnapshots = pgTable(
 	]
 );
 
-export const financialGoals = pgTable(
+export const financialGoals = sqliteTable(
 	'financial_goals',
 	{
-		id: uuid('id').primaryKey().defaultRandom(),
+		id: uuidPrimaryKey(),
 		userId: text('user_id')
 			.notNull()
 			.references(() => user.id, { onDelete: 'cascade' }),
-		name: varchar('name', { length: 160 }).notNull(),
+		name: text('name', { length: 160 }).notNull(),
 		goalType: text('goal_type').notNull(),
 		targetAmount: money('target_amount').notNull(),
 		currentAmount: money('current_amount').notNull().default('0'),
 		currency: currency().notNull(),
-		targetDate: date('target_date'),
+		targetDate: isoDate('target_date'),
 		priority: text('priority').notNull().default('medium'),
 		status: text('status').notNull().default('active'),
 		notes: text('notes'),
@@ -348,19 +347,19 @@ export const financialGoals = pgTable(
 		check('financial_goals_status_chk', oneOf('status', GOAL_STATUSES)),
 		check('financial_goals_priority_chk', oneOf('priority', GOAL_PRIORITIES)),
 		check('financial_goals_currency_chk', isCurrencyCode('currency')),
-		check('financial_goals_target_chk', sql`target_amount > 0`)
+		check('financial_goals_target_chk', isPositive('target_amount'))
 	]
 );
 
-export const userFinancialSettings = pgTable(
+export const userFinancialSettings = sqliteTable(
 	'user_financial_settings',
 	{
 		userId: text('user_id')
 			.primaryKey()
 			.references(() => user.id, { onDelete: 'cascade' }),
 		baseCurrency: currency('base_currency').notNull().default('THB'),
-		locale: varchar('locale', { length: 16 }).notNull().default('th-TH'),
-		timezone: varchar('timezone', { length: 64 }).notNull().default('Asia/Bangkok'),
+		locale: text('locale', { length: 16 }).notNull().default('th-TH'),
+		timezone: text('timezone', { length: 64 }).notNull().default('Asia/Bangkok'),
 		fiscalYearStartMonth: integer('fiscal_year_start_month').notNull().default(1),
 		/** Percentages: 6 means 6% nominal annual return. */
 		defaultReturnAssumption: rate('default_return_assumption').notNull().default('6'),
@@ -375,12 +374,12 @@ export const userFinancialSettings = pgTable(
 		 * Target sleeve weights in percent, e.g. { Equities: 55, Bonds: 20, … }.
 		 * Null means the user has not set any and DEFAULT_SLEEVE_TARGETS applies.
 		 * Shape is validated by sleeveTargetsSchema, not by a CHECK constraint —
-		 * a sum-to-100 rule over jsonb is unreadable SQL, and Zod is where this
+		 * a sum-to-100 rule over a JSON column is unreadable SQL, and Zod is where this
 		 * application validates shapes.
 		 */
-		sleeveTargets: jsonb('sleeve_targets').$type<SleeveTargets>(),
+		sleeveTargets: text('sleeve_targets', { mode: 'json' }).$type<SleeveTargets>(),
 		/** Set once the three-step first-run wizard completes; null means "show it". */
-		onboardedAt: timestamp('onboarded_at', { withTimezone: true }),
+		onboardedAt: instant('onboarded_at'),
 		createdAt: createdAt(),
 		updatedAt: updatedAt()
 	},
@@ -394,19 +393,19 @@ export const userFinancialSettings = pgTable(
 	]
 );
 
-export const importBatches = pgTable(
+export const importBatches = sqliteTable(
 	'import_batches',
 	{
-		id: uuid('id').primaryKey().defaultRandom(),
+		id: uuidPrimaryKey(),
 		userId: text('user_id')
 			.notNull()
 			.references(() => user.id, { onDelete: 'cascade' }),
 		kind: text('kind').notNull(),
 		/** File name only. CSV contents are never persisted or logged. */
-		fileName: varchar('file_name', { length: 255 }).notNull(),
+		fileName: text('file_name', { length: 255 }).notNull(),
 		fileSize: integer('file_size').notNull(),
 		/** SHA-256 of the uploaded bytes, used to warn about a repeat import. */
-		contentHash: varchar('content_hash', { length: 64 }).notNull(),
+		contentHash: text('content_hash', { length: 64 }).notNull(),
 		rowCount: integer('row_count').notNull().default(0),
 		importedCount: integer('imported_count').notNull().default(0),
 		rejectedCount: integer('rejected_count').notNull().default(0),

@@ -1,9 +1,9 @@
 import { building, dev } from '$app/environment';
 import { redirect, type Handle, type HandleServerError } from '@sveltejs/kit';
 import { svelteKitHandler } from 'better-auth/svelte-kit';
-import { env } from '$env/dynamic/private';
 import { getAuth } from '$lib/server/auth';
-import { ensurePglite, isPgliteUrl } from '$lib/server/db/pglite';
+import { bindDatabase } from '$lib/server/db';
+import { ensureDevSeed } from '$lib/server/db/dev-seed';
 import { PRIVATE_CACHE_CONTROL, securityHeaders } from '$lib/server/security/headers';
 import { log, newCorrelationId, userRef } from '$lib/server/security/logging';
 
@@ -102,22 +102,31 @@ const handleAuth: Handle = async ({ event, resolve }) => {
 };
 
 /**
- * Brings PGlite up before anything touches the database.
+ * Attaches the request's D1 binding before anything touches the database.
  *
  * `getDb()` is synchronous — it has to be, because `read()` is a default
- * parameter value across the repositories — so the asynchronous open/migrate/seed
- * happens here instead, once per process. Memoised inside `ensurePglite`, so this
- * costs one promise check per request after the first.
+ * parameter value across the repositories — and the binding only exists on
+ * `event.platform`, so this is where the two meet. In `vite dev` the adapter
+ * emulates `platform.env` from wrangler.jsonc, so the same code path serves the
+ * local SQLite database and the deployed D1 database.
  *
  * It must sit outside `handleAuth`: that calls `getAuth()`, which builds the
- * Better Auth adapter around `getDb()` eagerly. On the Neon path it is a no-op.
+ * Better Auth adapter around `getDb()` eagerly.
  */
 const handleDatabase: Handle = async ({ event, resolve }) => {
 	// Prerendering `/`, `/privacy` and `/terms` runs through this chain at build
-	// time, where there is no database to create and none needed.
+	// time, where there is no binding and no database needed.
 	if (!building) {
-		const url = env.DATABASE_URL;
-		if (url && isPgliteUrl(url)) await ensurePglite(url);
+		const binding = event.platform?.env?.DB;
+		if (!binding) {
+			throw new Error(
+				'No D1 binding named "DB" on platform.env. Declare it under d1_databases in wrangler.jsonc; `vite dev` picks it up through the platform proxy.'
+			);
+		}
+		bindDatabase(binding);
+		// Local development only: put the demo household into an empty database
+		// so every screen has something to render. Memoised per process.
+		if (dev) await ensureDevSeed();
 	}
 	return resolve(event);
 };

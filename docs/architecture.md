@@ -19,7 +19,7 @@ Browser
   ├── Repository: src/lib/server/repositories/
   │     user-scoped Drizzle queries, persistence mapping
   │
-  └── PostgreSQL (Neon)
+  └── Cloudflare D1 (SQLite), via the `DB` binding
 ```
 
 The financial engine sits beside this chain, not in it. Services call it with plain
@@ -112,15 +112,19 @@ The dashboard is the busiest screen. It issues:
 Not one query per card. `listAccountsWithUsage` and `shellSummary` use correlated
 subqueries so counts arrive with their rows rather than in an N+1 loop.
 
-## Transactions
+## Atomic writes
 
-`withTransaction()` opens a short-lived Neon WebSocket session, runs the callback
-inside `BEGIN`/`COMMIT`, and always closes the pool. It is used where a partial
-write would be wrong — currently the CSV import, where a failure must leave the
-account exactly as it was.
+D1 has no interactive transactions, so multi-statement writes are shaped as
+read-then-batch: gather what the write depends on, build the full row set, then
+send it as one `db.batch()`, which D1 runs as a single implicit transaction.
+`insertAll()` in `src/lib/server/db/batch.ts` does the chunking (D1 binds at most
+100 parameters per statement) and the batching. It is used where a partial write
+would be wrong — currently the CSV import, where a failure must leave the account
+exactly as it was. See [`database.md`](database.md#writes-and-atomicity).
 
-Reads and single-statement writes use the HTTP driver, which holds no connection
-and is what a Worker wants.
+The binding itself arrives on `event.platform.env.DB`; `handleDatabase` in
+`hooks.server.ts` hands it to `bindDatabase()` before anything else runs, which
+is what lets `getDb()` stay synchronous for the repositories' default parameters.
 
 ## Component organisation
 

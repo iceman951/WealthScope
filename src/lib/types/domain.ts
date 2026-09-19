@@ -2,9 +2,9 @@
  * Domain vocabulary shared by the database schema, the Zod schemas, the financial
  * engine and the UI. Browser-safe: no server-only imports live here.
  *
- * Enumerations are persisted as `text` with a CHECK constraint rather than a
- * PostgreSQL enum type, because these lists grow (new asset classes, new
- * transaction types) and altering a CHECK is a one-line migration.
+ * Enumerations are persisted as `text` with a CHECK constraint, because these
+ * lists grow (new asset classes, new transaction types) and altering a CHECK is
+ * a one-line migration.
  */
 
 export const ACCOUNT_TYPES = [

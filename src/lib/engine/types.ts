@@ -14,7 +14,7 @@ import type {
  * engine has no database import, so it can be unit-tested with literals and
  * reused by a worker or a report generator without dragging a driver along.
  *
- * Every numeric field is the exact string PostgreSQL returned.
+ * Every numeric field is the exact decimal string the database stored.
  */
 
 export interface AssetInput {

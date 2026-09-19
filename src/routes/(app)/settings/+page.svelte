@@ -461,8 +461,9 @@
 			</tbody>
 		</table>
 		<p class="text-muted tiny">
-			Records live in a PostgreSQL database and are scoped to your account. Export them at any time
-			from <a href="/reports">Reports</a> — the CSV mirrors the import schema, so a round trip loses nothing.
+			Records live in a Cloudflare D1 database and are scoped to your account. Export them at any
+			time from <a href="/reports">Reports</a> — the CSV mirrors the import schema, so a round trip loses
+			nothing.
 		</p>
 
 		<div class="hr"></div>

@@ -3,8 +3,8 @@
 	"name": "wealthscope",
 	"main": ".svelte-kit/cloudflare/_worker.js",
 	"compatibility_date": "2025-08-01",
-	// nodejs_compat is required by @neondatabase/serverless (node:events, node:buffer)
-	// and by pdf-lib's use of node:buffer during report generation.
+	// nodejs_compat is required by pdf-lib's use of node:buffer during report
+	// generation, and by the demo seed's node:crypto scrypt (dev only).
 	"compatibility_flags": ["nodejs_compat"],
 	"assets": {
 		"binding": "ASSETS",
@@ -13,16 +13,30 @@
 	"observability": {
 		"enabled": true
 	},
+	"d1_databases": [
+		{
+			// The application reads this binding as `platform.env.DB`.
+			"binding": "DB",
+			"database_name": "wealthscope",
+			// Replace with the id printed by `wrangler d1 create wealthscope`.
+			// Local development ignores it: `vite dev` and `wrangler dev` use a
+			// SQLite file under .wrangler/state keyed by database_name.
+			"database_id": "00000000-0000-0000-0000-000000000000",
+			// Drizzle writes migrations here (`pnpm db:generate`); wrangler applies
+			// them from the same folder (`pnpm db:migrate`).
+			"migrations_dir": "drizzle"
+		}
+	],
 	"vars": {
 		"PUBLIC_APP_NAME": "WealthScope",
 		"PUBLIC_DEFAULT_LOCALE": "th-TH",
 		"PUBLIC_DEFAULT_CURRENCY": "THB"
 	},
 	"placement": {
-		// Run the Worker near the Neon Singapore region rather than near the visitor,
-		// because every protected page makes several round trips to Postgres.
+		// Every protected page makes several D1 round trips; smart placement
+		// lets the runtime move the Worker next to the database when that wins.
 		"mode": "smart"
 	}
-	// Secrets (never committed): DATABASE_URL, BETTER_AUTH_SECRET, BETTER_AUTH_URL
-	// Set them with: wrangler secret put DATABASE_URL
+	// Secrets (never committed): BETTER_AUTH_SECRET, BETTER_AUTH_URL
+	// Set them with: wrangler secret put BETTER_AUTH_SECRET
 }

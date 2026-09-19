@@ -3,9 +3,8 @@ import { getDb, type DbClient } from './index';
 /**
  * Read-side helpers.
  *
- * Kept separate from ./transaction.ts so a page load never accidentally opens a
- * WebSocket session it does not need, and so repositories can be handed either
- * the HTTP client or a transaction client without knowing which they hold.
+ * Kept separate from ./batch.ts so the atomic write path stays an explicit
+ * choice at the call site rather than something a page load reaches by accident.
  */
 
 export function read(): DbClient {
@@ -13,7 +12,8 @@ export function read(): DbClient {
 }
 
 /**
- * Runs independent read queries as one HTTP round trip instead of N.
+ * Runs independent read queries concurrently. D1 answers each over its own
+ * round trip; this keeps them in flight together rather than serialised.
  * Used by the dashboard, which needs six aggregates to render one screen.
  */
 export async function readAll<T extends readonly Promise<unknown>[] | []>(

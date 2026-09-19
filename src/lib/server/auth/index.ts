@@ -33,7 +33,7 @@ function buildAuth(secret: string, baseURL: string) {
 		baseURL,
 		basePath: '/api/auth',
 		database: drizzleAdapter(db, {
-			provider: 'pg',
+			provider: 'sqlite',
 			schema: { user, session, account, verification }
 		}),
 		emailAndPassword: {

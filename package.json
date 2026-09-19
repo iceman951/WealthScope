@@ -8,7 +8,7 @@
 		"node": ">=26"
 	},
 	"scripts": {
-		"prepare": "svelte-kit sync",
+		"prepare": "svelte-kit sync && wrangler types --include-env=false",
 		"predev": "svelte-kit sync",
 		"dev": "vite dev",
 		"build": "vite build",
@@ -23,14 +23,13 @@
 		"test:watch": "vitest",
 		"test:e2e": "playwright test",
 		"db:generate": "drizzle-kit generate",
-		"db:migrate": "drizzle-kit migrate",
-		"db:push": "drizzle-kit push",
-		"db:studio": "drizzle-kit studio",
+		"db:migrate": "wrangler d1 migrations apply wealthscope --local",
+		"db:migrate:remote": "wrangler d1 migrations apply wealthscope --remote",
 		"db:seed": "tsx scripts/seed.ts",
-		"db:reset": "node -e \"require('node:fs').rmSync('.pglite',{recursive:true,force:true})\""
+		"db:reset": "node -e \"require('node:fs').rmSync('.wrangler/state',{recursive:true,force:true})\"",
+		"cf:types": "wrangler types --include-env=false"
 	},
 	"dependencies": {
-		"@neondatabase/serverless": "^1.1.0",
 		"better-auth": "^1.6.28",
 		"decimal.js": "^10.6.0",
 		"drizzle-orm": "^0.45.2",
@@ -40,7 +39,6 @@
 		"zod": "^4.4.3"
 	},
 	"devDependencies": {
-		"@electric-sql/pglite": "^0.5.5",
 		"@eslint/js": "^10.0.1",
 		"@playwright/test": "^1.62.1",
 		"@sveltejs/adapter-cloudflare": "^7.2.9",

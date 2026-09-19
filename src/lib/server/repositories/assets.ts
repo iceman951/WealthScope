@@ -192,13 +192,22 @@ export async function recordPrice(
 	return rows[0];
 }
 
-/** Total market value by asset type, computed in the database. */
+/**
+ * Total market value by asset type, computed in the database.
+ *
+ * The decimal-string columns are cast for the arithmetic, so this is a REAL sum
+ * — fine for a chart or a rough rollup, not for anything that must reconcile to
+ * the cent. Exact totals come from the engine over `listAssets()`.
+ */
 export async function assetTotalsByType(userId: string, db: DbClient = read()) {
 	return db
 		.select({
 			assetType: assets.assetType,
 			currency: assets.currency,
-			total: sql<string>`sum(coalesce(${assets.manualValue}, ${assets.quantity} * ${assets.unitPrice}))`
+			total: sql<number>`sum(coalesce(
+				cast(${assets.manualValue} as real),
+				cast(${assets.quantity} as real) * cast(${assets.unitPrice} as real)
+			))`
 		})
 		.from(assets)
 		.where(eq(assets.userId, userId))

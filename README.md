@@ -14,7 +14,7 @@ One SvelteKit repository — frontend, server-side rendering, form actions, API 
 - [Prerequisites](#prerequisites)
 - [Installation](#installation)
 - [Environment setup](#environment-setup)
-- [Neon setup](#neon-setup)
+- [D1 setup](#d1-setup)
 - [Migrations](#migrations)
 - [Seed data](#seed-data)
 - [Local development](#local-development)
@@ -64,7 +64,7 @@ Two principles run through all of it:
 | Language   | TypeScript, strict                                          | `any` is banned by lint                                  |
 | Build      | Vite 7, pnpm                                                | Route-level code splitting out of the box                |
 | Runtime    | Cloudflare Workers, `@sveltejs/adapter-cloudflare`          | Edge SSR near the database                               |
-| Database   | Neon Serverless PostgreSQL                                  | HTTP driver for reads, WebSocket sessions for writes     |
+| Database   | Cloudflare D1 (SQLite)                                      | A Worker binding: no connection string, no cold connect  |
 | ORM        | Drizzle ORM + Drizzle Kit                                   | Typed schema, SQL migrations committed to the repo       |
 | Auth       | Better Auth + Drizzle adapter                               | Database-backed sessions, HTTP-only cookies              |
 | Validation | Zod 4                                                       | One schema shared by forms, actions and the CSV importer |
@@ -87,7 +87,7 @@ Service                      authorization, business rules, transaction boundari
         ↓
 Repository                   user-scoped queries, persistence mapping
         ↓
-Drizzle → PostgreSQL
+Drizzle → Cloudflare D1
 
 Financial engine             pure calculation: no database, Svelte or Cloudflare imports
 ```
@@ -104,9 +104,8 @@ More in [`docs/architecture.md`](docs/architecture.md).
 
 - Node.js 22 or later
 - pnpm 10 or later
-- A Neon PostgreSQL project — **only to deploy**. Local development runs on
-  PGlite and needs no database service and no network.
-- A Cloudflare account, to deploy
+- A Cloudflare account — **only to deploy**. Local development runs on a local
+  D1 database under `.wrangler/state` and needs no service and no network.
 
 ---
 
@@ -124,15 +123,18 @@ pnpm install
 cp .env.example .env
 ```
 
-| Variable                  | Required | Notes                                                      |
-| ------------------------- | -------- | ---------------------------------------------------------- |
-| `DATABASE_URL`            | yes      | Selects the driver — see the table below                   |
-| `BETTER_AUTH_SECRET`      | yes      | Session signing key — `openssl rand -base64 32`            |
-| `BETTER_AUTH_URL`         | yes      | Public origin; must match the browser origin exactly       |
-| `PUBLIC_APP_NAME`         | no       | Defaults to `WealthScope`                                  |
-| `PUBLIC_DEFAULT_LOCALE`   | no       | Defaults to `th-TH`                                        |
-| `PUBLIC_DEFAULT_CURRENCY` | no       | Defaults to `THB`                                          |
-| `TEST_DATABASE_URL`       | no       | `memory://` runs the integration suite with no external DB |
+| Variable                  | Required | Notes                                                |
+| ------------------------- | -------- | ---------------------------------------------------- |
+| `BETTER_AUTH_SECRET`      | yes      | Session signing key — `openssl rand -base64 32`      |
+| `BETTER_AUTH_URL`         | yes      | Public origin; must match the browser origin exactly |
+| `PUBLIC_APP_NAME`         | no       | Defaults to `WealthScope`                            |
+| `PUBLIC_DEFAULT_LOCALE`   | no       | Defaults to `th-TH`                                  |
+| `PUBLIC_DEFAULT_CURRENCY` | no       | Defaults to `THB`                                    |
+| `SKIP_INTEGRATION`        | no       | Set to `1` to leave the integration suite out        |
+
+There is no database variable. The database is the `DB` binding in
+`wrangler.jsonc`, and which database that is depends on how the app runs — see
+the next section.
 
 `.env` is gitignored. Never commit real credentials.
 
@@ -140,67 +142,63 @@ cp .env.example .env
 
 ## Which database
 
-The shape of `DATABASE_URL` picks the driver. Nothing else changes — PGlite _is_
-PostgreSQL, so one schema and one set of migrations serve both.
+The application only ever sees `platform.env.DB`. What stands behind it:
 
-| `DATABASE_URL`   | Driver | Use                                                     |
-| ---------------- | ------ | ------------------------------------------------------- |
-| `file:./.pglite` | PGlite | Local development. Persists across restarts.            |
-| `memory://`      | PGlite | Integration tests. Discarded on exit.                   |
-| `postgresql://…` | Neon   | Production, and local work against the remote database. |
+| Command        | Runtime        | Database                                        |
+| -------------- | -------------- | ----------------------------------------------- |
+| `pnpm dev`     | Vite + Node    | Local SQLite under `.wrangler/state`, persisted |
+| `pnpm preview` | `wrangler dev` | The same local database, on workerd             |
+| `pnpm test`    | Vitest         | A throwaway in-memory D1 per suite              |
+| `pnpm deploy`  | Cloudflare     | The real D1 database named in `wrangler.jsonc`  |
 
-**PGlite** is PostgreSQL 17 compiled to WebAssembly, running inside the dev
-server's own process. It needs no service, no container and no network, and it
-starts the schema from `drizzle/*.sql` unmodified — exact `numeric`, the CHECK
-constraints, the POSIX regex operators and `gen_random_uuid()` all behave as they
-do on Neon, so nothing is "close enough for development".
+In `vite dev`, `@sveltejs/adapter-cloudflare` emulates `platform.env` from
+`wrangler.jsonc` through wrangler's platform proxy, so the local database is the
+same SQLite engine and the same workerd D1 implementation that production runs,
+built from the same `drizzle/*.sql`. Nothing is "close enough for development".
 
-On first boot it creates the schema and seeds the demo household automatically.
-Two consequences worth knowing:
+Two things to know:
 
-- It is one process holding an exclusive lock on `./.pglite`. Stop `pnpm dev`
-  before running `pnpm db:seed`, `db:push`, `db:migrate` or `db:studio`.
-- `pnpm preview` is `wrangler dev`, which runs on workerd and cannot load PGlite.
-  Point `DATABASE_URL` at Neon before previewing the Worker build. (Playwright's
-  `vite preview` runs on Node and works with either.)
-
-`pnpm db:reset` deletes `./.pglite`; the next `pnpm dev` rebuilds it from scratch.
-
-The predicate is the URL, deliberately, and not `dev` from `$app/environment` —
-`vite preview` reports `dev` as false while still reading `.env`, so gating on it
-would silently send the end-to-end tests to Neon.
+- The schema is wrangler's job, not the app's. Run `pnpm db:migrate` once after
+  cloning (and after every new migration); the first request then seeds the demo
+  household into the empty database automatically.
+- `pnpm db:reset` deletes `.wrangler/state`. Migrate again and the next
+  `pnpm dev` rebuilds the demo data from scratch.
 
 ---
 
-## Neon setup
+## D1 setup
 
-1. Create a Neon project in **`ap-southeast-1` (Singapore)** — the region closest to Thailand, which is where the default locale points.
-2. Copy the **pooled** connection string (the host contains `-pooler`) into `DATABASE_URL`.
-3. Run the migrations below.
+Only needed to deploy. Local development works without it.
 
-Both drivers are used deliberately:
+1. `wrangler d1 create wealthscope` and paste the printed id into
+   `wrangler.jsonc` → `d1_databases[0].database_id`.
+2. `pnpm db:migrate:remote` to build the schema.
+3. Set the secrets (below) and `pnpm deploy`.
 
-- `drizzle-orm/neon-http` for reads and single-statement writes — no connection to hold open, which is what a Worker wants.
-- `drizzle-orm/neon-serverless` inside `withTransaction()` for multi-statement financial writes, which need a real session.
+Two D1 limits shape the code, both handled in `src/lib/server/db/batch.ts`:
+at most 100 bound parameters per statement, and no interactive transactions.
+Multi-row writes are chunked to fit and sent as one atomic `batch()`, so the
+CSV import still either lands completely or not at all.
 
 ---
 
 ## Migrations
 
 ```bash
-pnpm db:generate     # regenerate SQL after a schema change
-pnpm db:migrate      # apply pending migrations
-pnpm db:studio       # browse the database
+pnpm db:generate         # regenerate SQL after a schema change (no database needed)
+pnpm db:migrate          # apply pending migrations to the local database
+pnpm db:migrate:remote   # apply pending migrations to the deployed database
 ```
 
-`drizzle/0000_init.sql` creates 15 tables with their indexes, foreign keys and check constraints.
+Drizzle writes the SQL; wrangler applies it. Both point at `drizzle/`, and
+wrangler records what it has applied in the database's `d1_migrations` table, so
+each command is safe to repeat. `drizzle/0000_init.sql` creates 15 tables with
+their indexes, foreign keys and check constraints.
 
-**Do not use `pnpm db:push` as the production migration process.** It diffs and applies without producing a migration file, so there is no reviewable record of what changed. It exists for throwaway local iteration.
-
-Production:
+To look inside the local database:
 
 ```bash
-DATABASE_URL="<production pooled url>" pnpm db:migrate
+wrangler d1 execute wealthscope --local --command "select count(*) from assets"
 ```
 
 ---
@@ -219,7 +217,7 @@ email:    demo@wealthscope.example
 password: demo-password-1234
 ```
 
-The script refuses to run when `NODE_ENV=production` or when `DATABASE_URL` contains `prod`.
+It seeds the local database only; there is deliberately no remote mode. The script also refuses to run when `NODE_ENV=production`.
 
 ---
 
@@ -230,12 +228,12 @@ pnpm dev             # http://localhost:5555
 pnpm check           # svelte-check, strict TypeScript
 pnpm lint            # prettier --check + eslint
 pnpm format          # prettier --write
-pnpm db:reset        # delete the local PGlite database; next `dev` rebuilds it
+pnpm db:reset        # delete the local database; `pnpm db:migrate` rebuilds it
 ```
 
-On a PGlite `DATABASE_URL` the first request builds the schema and seeds the demo
-account, which takes a few seconds. Every request after that is served from
-memory — no network round trip to a database at all.
+After `pnpm db:migrate`, the first request seeds the demo account into the empty
+database, which takes a moment. Every request after that is served from the
+local SQLite file — no network round trip to a database at all.
 
 ---
 
@@ -249,18 +247,16 @@ pnpm test:e2e        # Playwright (builds and previews first)
 
 **Unit tests** (237, no infrastructure needed) cover the money helpers, currency conversion, net worth, allocation, cash flow, debt, returns, risk, projection, the health score, the findings rules, every Zod schema, CSV mapping, duplicate detection and CSV export safety — including zero, negative, very large and many-decimal values, missing exchange rates, mixed currencies, empty portfolios, division by zero and partial history.
 
-**Integration tests** run against a real PostgreSQL database and are **skipped unless `TEST_DATABASE_URL` is set**. They cover repository queries, exact numeric round-tripping, snapshot upserts and — the central claim — that no repository method reaches another user's row, whatever id it is handed.
+**Integration tests** run against a real D1 database: a throwaway in-memory
+one per suite, started through wrangler's platform proxy and migrated from
+`drizzle/*.sql`. No infrastructure, no network, under ten seconds for the whole
+suite. They cover repository queries, exact decimal round-tripping, snapshot
+upserts and — the central claim — that no repository method reaches another
+user's row, whatever id it is handed. `SKIP_INTEGRATION=1 pnpm test` leaves
+them out.
 
-`.env.example` sets `TEST_DATABASE_URL=memory://`, which runs them against a
-throwaway PGlite instance that migrates itself: real PostgreSQL, no infrastructure,
-about two seconds for the whole suite. Point it at a scratch Neon branch instead
-when you want to verify the hosted driver:
-
-```bash
-TEST_DATABASE_URL="postgresql://..." pnpm test
-```
-
-**End-to-end tests** need a running app and a database. Point `.env` at a scratch database, then:
+**End-to-end tests** need a running app and a migrated local database
+(`pnpm db:migrate`), then:
 
 ```bash
 pnpm test:e2e
@@ -300,12 +296,11 @@ pnpm deploy                        # wrangler deploy
 Set the secrets once per environment:
 
 ```bash
-wrangler secret put DATABASE_URL
 wrangler secret put BETTER_AUTH_SECRET
 wrangler secret put BETTER_AUTH_URL
 ```
 
-Public variables live in `wrangler.jsonc` under `vars`. `nodejs_compat` is required — `@neondatabase/serverless` and pdf-lib both need it. Placement is `smart` so the Worker runs near Neon rather than near the visitor, because every protected page makes several database round trips.
+Public variables live in `wrangler.jsonc` under `vars`, and the database is its `d1_databases` entry. `nodejs_compat` is required — pdf-lib needs `node:buffer`. Placement is `smart` so the runtime can move the Worker next to the database, because every protected page makes several D1 round trips.
 
 Full checklist in [`docs/deployment.md`](docs/deployment.md).
 
@@ -355,17 +350,17 @@ const total = 0.1 + 0.2; // 0.30000000000000004 — never
 const total = new Decimal('0.1').plus('0.2'); // 0.3 — always
 ```
 
-PostgreSQL column types:
+Column storage:
 
-| Kind                           | Type              |
-| ------------------------------ | ----------------- |
-| Money and balances             | `numeric(24, 8)`  |
-| Asset quantities               | `numeric(30, 12)` |
-| Asset prices                   | `numeric(24, 8)`  |
-| Exchange rates                 | `numeric(24, 12)` |
-| Interest rates and percentages | `numeric(14, 8)`  |
+| Kind                           | Storage               | Scale |
+| ------------------------------ | --------------------- | ----- |
+| Money and balances             | `text` decimal string | 8 dp  |
+| Asset quantities               | `text` decimal string | 12 dp |
+| Asset prices                   | `text` decimal string | 8 dp  |
+| Exchange rates                 | `text` decimal string | 12 dp |
+| Interest rates and percentages | `text` decimal string | 8 dp  |
 
-Drizzle returns `numeric` as a string. Those strings are parsed straight into `Decimal` by the engine; a value never passes through a JavaScript `number` on the way in or out of the database. The only place `number` appears is where a value is on its way to a CSS width or an SVG coordinate.
+SQLite has no arbitrary-precision numeric — a `REAL` column would round past 16 significant digits — so every financial value is stored as the exact decimal string the engine produced. Drizzle returns it unchanged and the engine parses it straight into `Decimal`; a value never passes through a JavaScript `number` on the way in or out of the database. The only place `number` appears is where a value is on its way to a CSS width or an SVG coordinate.
 
 Rounding:
 

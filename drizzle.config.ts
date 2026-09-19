@@ -1,25 +1,20 @@
-import 'dotenv/config';
 import { defineConfig } from 'drizzle-kit';
-import { isPgliteUrl, pgliteDataDir } from './src/lib/server/db/pglite';
 
 /**
- * `drizzle-kit generate` only reads the schema, so it works without a connection.
- * `migrate`, `push` and `studio` need DATABASE_URL and fail loudly without it.
+ * drizzle-kit is used for one thing here: `generate`, which diffs the schema
+ * against drizzle/meta and writes the next `drizzle/NNNN_name.sql`. It reads
+ * only the schema, so it needs no database and no credentials.
  *
- * Both drivers speak the same dialect, so `generate` produces one set of SQL that
- * applies to PGlite and Neon alike. Against PGlite, stop the dev server first —
- * it holds the data directory open.
+ * Applying migrations is wrangler's job — `pnpm db:migrate` for the local
+ * database, `pnpm db:migrate:remote` for the deployed one — because D1 is a
+ * binding, not a connection string, and wrangler tracks what has been applied
+ * in the database's `d1_migrations` table. wrangler.jsonc points
+ * `migrations_dir` at the same `drizzle/` folder, so there is one set of SQL.
  */
-
-const url = process.env.DATABASE_URL ?? '';
-const pglite = isPgliteUrl(url);
-
 export default defineConfig({
 	schema: './src/lib/server/db/schema/index.ts',
 	out: './drizzle',
-	dialect: 'postgresql',
-	...(pglite ? { driver: 'pglite' as const } : {}),
-	dbCredentials: { url: pglite ? pgliteDataDir(url) : url },
+	dialect: 'sqlite',
 	strict: true,
 	verbose: true
 });

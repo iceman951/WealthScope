@@ -5,15 +5,36 @@
  * price history, trades, liabilities, cash flow, goals and net-worth snapshots —
  * so every screen and every chart has something real to render.
  *
- * Driver-agnostic on purpose: it takes a `DbClient` rather than opening its own
- * connection, so the same code seeds a Neon database from `scripts/seed.ts` and
- * an in-process PGlite database from `ensurePglite()` at dev boot.
+ * It takes a `DbClient` rather than obtaining its own binding, so the same code
+ * seeds the local database from `scripts/seed.ts` and from `ensureDevSeed()` at
+ * dev boot.
+ *
+ * Multi-row inserts go through `insertChunked` because D1 binds at most 100
+ * parameters per statement, and the wider tables here exceed that at six rows.
+ * Ids are generated up front instead of read back with `returning()`, which a
+ * chunked insert cannot offer.
  */
 
-import { eq } from 'drizzle-orm';
+import { eq, type InferInsertModel } from 'drizzle-orm';
+import type { SQLiteTable } from 'drizzle-orm/sqlite-core';
 import { scryptSync, randomBytes, randomUUID } from 'node:crypto';
+import { chunk, insertChunkSize } from './batch';
 import * as schema from './schema';
 import type { DbClient } from './index';
+
+/** Sequential chunked insert; the seed needs the parameter limit respected, not atomicity. */
+async function insertChunked<TTable extends SQLiteTable>(
+	db: DbClient,
+	table: TTable,
+	rows: readonly InferInsertModel<TTable>[],
+	options: { ignoreConflicts?: boolean } = {}
+): Promise<void> {
+	for (const part of chunk(rows, insertChunkSize(table))) {
+		const statement = db.insert(table).values(part as InferInsertModel<TTable>[]);
+		if (options.ignoreConflicts) await statement.onConflictDoNothing();
+		else await statement;
+	}
+}
 
 export const DEMO_EMAIL = 'demo@wealthscope.example';
 export const DEMO_PASSWORD = 'demo-password-1234';
@@ -129,163 +150,159 @@ export async function seedDemoData(db: DbClient, options: { reset?: boolean } = 
 	}
 
 	/* ── accounts ────────────────────────────────────────────────────────── */
-	const accountRows = await db
-		.insert(schema.financialAccounts)
-		.values([
-			{
-				userId,
-				name: 'Everyday current account',
-				accountType: 'bank',
-				institution: 'Demo Bank',
-				currency: 'THB',
-				description: 'Salary lands here'
-			},
-			{
-				userId,
-				name: 'Emergency savings',
-				accountType: 'bank',
-				institution: 'Demo Bank',
-				currency: 'THB'
-			},
-			{
-				userId,
-				name: 'Brokerage',
-				accountType: 'brokerage',
-				institution: 'Demo Securities',
-				currency: 'USD'
-			},
-			{
-				userId,
-				name: 'Provident fund',
-				accountType: 'retirement',
-				institution: 'Demo Asset Management',
-				currency: 'THB',
-				description: 'Locked until 55'
-			},
-			{
-				userId,
-				name: 'Home loan',
-				accountType: 'loan',
-				institution: 'Demo Bank',
-				currency: 'THB'
-			}
-		])
-		.returning({ id: schema.financialAccounts.id, name: schema.financialAccounts.name });
+	const accountRows = [
+		{
+			userId,
+			name: 'Everyday current account',
+			accountType: 'bank',
+			institution: 'Demo Bank',
+			currency: 'THB',
+			description: 'Salary lands here'
+		},
+		{
+			userId,
+			name: 'Emergency savings',
+			accountType: 'bank',
+			institution: 'Demo Bank',
+			currency: 'THB'
+		},
+		{
+			userId,
+			name: 'Brokerage',
+			accountType: 'brokerage',
+			institution: 'Demo Securities',
+			currency: 'USD'
+		},
+		{
+			userId,
+			name: 'Provident fund',
+			accountType: 'retirement',
+			institution: 'Demo Asset Management',
+			currency: 'THB',
+			description: 'Locked until 55'
+		},
+		{
+			userId,
+			name: 'Home loan',
+			accountType: 'loan',
+			institution: 'Demo Bank',
+			currency: 'THB'
+		}
+	].map((row) => ({ id: randomUUID(), ...row }));
+	await insertChunked(db, schema.financialAccounts, accountRows);
 
 	const accountId = (name: string) => accountRows.find((a) => a.name === name)!.id;
 
 	/* ── assets ──────────────────────────────────────────────────────────── */
-	const assetRows = await db
-		.insert(schema.assets)
-		.values([
-			{
-				userId,
-				accountId: null,
-				name: 'Condominium — Sukhumvit',
-				assetType: 'property',
-				currency: 'THB',
-				quantity: '1',
-				unitPrice: '0',
-				manualValue: '8400000',
-				acquisitionCost: '7200000',
-				valuationDate: monthsAgo(1),
-				notes: 'Owner-occupied. Fictional demo record.'
-			},
-			{
-				userId,
-				accountId: accountId('Everyday current account'),
-				name: 'Current account balance',
-				assetType: 'cash',
-				currency: 'THB',
-				quantity: '1',
-				unitPrice: '182400',
-				valuationDate: iso(today)
-			},
-			{
-				userId,
-				accountId: accountId('Emergency savings'),
-				name: 'Emergency savings',
-				assetType: 'cash',
-				currency: 'THB',
-				quantity: '1',
-				unitPrice: '640000',
-				valuationDate: iso(today),
-				notes: 'Instant access'
-			},
-			{
-				userId,
-				accountId: accountId('Provident fund'),
-				name: 'Provident fund',
-				assetType: 'fund',
-				currency: 'THB',
-				quantity: '1',
-				unitPrice: '1960000',
-				acquisitionCost: '1480000',
-				valuationDate: monthsAgo(1)
-			},
-			{
-				userId,
-				accountId: null,
-				name: 'Vehicle',
-				assetType: 'vehicle',
-				currency: 'THB',
-				quantity: '1',
-				unitPrice: '0',
-				manualValue: '520000',
-				acquisitionCost: '890000',
-				valuationDate: monthsAgo(2),
-				notes: 'Depreciating'
-			},
-			{
-				userId,
-				accountId: accountId('Brokerage'),
-				name: 'FTSE All-World ETF',
-				assetType: 'etf',
-				symbol: 'VWRA',
-				currency: 'USD',
-				quantity: '412',
-				unitPrice: '142.80',
-				acquisitionCost: '48900',
-				valuationDate: iso(today)
-			},
-			{
-				userId,
-				accountId: accountId('Brokerage'),
-				name: 'S&P 500 ETF',
-				assetType: 'etf',
-				symbol: 'CSPX',
-				currency: 'USD',
-				quantity: '61',
-				unitPrice: '624.10',
-				acquisitionCost: '29100',
-				valuationDate: iso(today)
-			},
-			{
-				userId,
-				accountId: accountId('Brokerage'),
-				name: 'Global aggregate bond ETF',
-				assetType: 'bond',
-				symbol: 'AGGU',
-				currency: 'USD',
-				quantity: '1800',
-				unitPrice: '5.42',
-				acquisitionCost: '10400',
-				valuationDate: iso(today)
-			},
-			{
-				userId,
-				accountId: accountId('Brokerage'),
-				name: 'Physical gold ETC',
-				assetType: 'collectible',
-				symbol: 'SGLN',
-				currency: 'USD',
-				quantity: '310',
-				unitPrice: '38.60',
-				acquisitionCost: '8100',
-				valuationDate: iso(today)
-			}
-		])
-		.returning({ id: schema.assets.id, symbol: schema.assets.symbol, name: schema.assets.name });
+	const assetRows = [
+		{
+			userId,
+			accountId: null,
+			name: 'Condominium — Sukhumvit',
+			assetType: 'property',
+			currency: 'THB',
+			quantity: '1',
+			unitPrice: '0',
+			manualValue: '8400000',
+			acquisitionCost: '7200000',
+			valuationDate: monthsAgo(1),
+			notes: 'Owner-occupied. Fictional demo record.'
+		},
+		{
+			userId,
+			accountId: accountId('Everyday current account'),
+			name: 'Current account balance',
+			assetType: 'cash',
+			currency: 'THB',
+			quantity: '1',
+			unitPrice: '182400',
+			valuationDate: iso(today)
+		},
+		{
+			userId,
+			accountId: accountId('Emergency savings'),
+			name: 'Emergency savings',
+			assetType: 'cash',
+			currency: 'THB',
+			quantity: '1',
+			unitPrice: '640000',
+			valuationDate: iso(today),
+			notes: 'Instant access'
+		},
+		{
+			userId,
+			accountId: accountId('Provident fund'),
+			name: 'Provident fund',
+			assetType: 'fund',
+			currency: 'THB',
+			quantity: '1',
+			unitPrice: '1960000',
+			acquisitionCost: '1480000',
+			valuationDate: monthsAgo(1)
+		},
+		{
+			userId,
+			accountId: null,
+			name: 'Vehicle',
+			assetType: 'vehicle',
+			currency: 'THB',
+			quantity: '1',
+			unitPrice: '0',
+			manualValue: '520000',
+			acquisitionCost: '890000',
+			valuationDate: monthsAgo(2),
+			notes: 'Depreciating'
+		},
+		{
+			userId,
+			accountId: accountId('Brokerage'),
+			name: 'FTSE All-World ETF',
+			assetType: 'etf',
+			symbol: 'VWRA',
+			currency: 'USD',
+			quantity: '412',
+			unitPrice: '142.80',
+			acquisitionCost: '48900',
+			valuationDate: iso(today)
+		},
+		{
+			userId,
+			accountId: accountId('Brokerage'),
+			name: 'S&P 500 ETF',
+			assetType: 'etf',
+			symbol: 'CSPX',
+			currency: 'USD',
+			quantity: '61',
+			unitPrice: '624.10',
+			acquisitionCost: '29100',
+			valuationDate: iso(today)
+		},
+		{
+			userId,
+			accountId: accountId('Brokerage'),
+			name: 'Global aggregate bond ETF',
+			assetType: 'bond',
+			symbol: 'AGGU',
+			currency: 'USD',
+			quantity: '1800',
+			unitPrice: '5.42',
+			acquisitionCost: '10400',
+			valuationDate: iso(today)
+		},
+		{
+			userId,
+			accountId: accountId('Brokerage'),
+			name: 'Physical gold ETC',
+			assetType: 'collectible',
+			symbol: 'SGLN',
+			currency: 'USD',
+			quantity: '310',
+			unitPrice: '38.60',
+			acquisitionCost: '8100',
+			valuationDate: iso(today)
+		}
+	].map((row) => ({ id: randomUUID(), ...row }));
+	await insertChunked(db, schema.assets, assetRows);
 
 	const assetId = (symbol: string) => assetRows.find((a) => a.symbol === symbol)!.id;
 
@@ -313,11 +330,11 @@ export async function seedDemoData(db: DbClient, options: { reset?: boolean } = 
 				source: 'manual' as const
 			});
 		}
-		await db.insert(schema.assetPrices).values(rows).onConflictDoNothing();
+		await insertChunked(db, schema.assetPrices, rows, { ignoreConflicts: true });
 	}
 
 	/* ── transactions ────────────────────────────────────────────────────── */
-	await db.insert(schema.transactions).values([
+	await insertChunked(db, schema.transactions, [
 		{
 			userId,
 			accountId: accountId('Brokerage'),
@@ -395,7 +412,7 @@ export async function seedDemoData(db: DbClient, options: { reset?: boolean } = 
 	]);
 
 	/* ── liabilities ─────────────────────────────────────────────────────── */
-	await db.insert(schema.liabilities).values([
+	await insertChunked(db, schema.liabilities, [
 		{
 			userId,
 			accountId: accountId('Home loan'),
@@ -435,7 +452,7 @@ export async function seedDemoData(db: DbClient, options: { reset?: boolean } = 
 	]);
 
 	/* ── cash flow ───────────────────────────────────────────────────────── */
-	await db.insert(schema.cashflowEntries).values([
+	await insertChunked(db, schema.cashflowEntries, [
 		{
 			userId,
 			entryType: 'income',
@@ -561,7 +578,7 @@ export async function seedDemoData(db: DbClient, options: { reset?: boolean } = 
 	]);
 
 	/* ── goals ───────────────────────────────────────────────────────────── */
-	await db.insert(schema.financialGoals).values([
+	await insertChunked(db, schema.financialGoals, [
 		{
 			userId,
 			name: 'Six months of expenses',
@@ -613,7 +630,7 @@ export async function seedDemoData(db: DbClient, options: { reset?: boolean } = 
 			metadataJson: { source: 'seed' }
 		});
 	}
-	await db.insert(schema.portfolioSnapshots).values(snapshotRows).onConflictDoNothing();
+	await insertChunked(db, schema.portfolioSnapshots, snapshotRows, { ignoreConflicts: true });
 
 	console.log('\nSeed complete. Sign in with:');
 	console.log(`  email:    ${DEMO_EMAIL}`);

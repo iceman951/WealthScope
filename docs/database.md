@@ -1,6 +1,11 @@
 # Database
 
-Neon Serverless PostgreSQL, Drizzle ORM, SQL migrations committed to `drizzle/`.
+Cloudflare D1 (SQLite), Drizzle ORM, SQL migrations committed to `drizzle/`.
+
+The database is a Worker binding named `DB`, declared in `wrangler.jsonc`. The
+same binding backs every environment: `vite dev` and `wrangler dev` read a local
+SQLite file under `.wrangler/state`, the deployed Worker reads the real D1
+database, and the integration tests start a throwaway in-memory one.
 
 ## Tables
 
@@ -35,24 +40,46 @@ sign-in.
 `exchange_rates` is the one table not scoped by user: rates are reference data and
 contain nothing personal.
 
-## Numeric types
+## Column types
 
-| Kind                           | Type              | Why                                         |
-| ------------------------------ | ----------------- | ------------------------------------------- |
-| Money and balances             | `numeric(24, 8)`  | ~10^16 major units at 8 dp                  |
-| Asset quantities               | `numeric(30, 12)` | Fractional shares and 12-dp crypto units    |
-| Asset prices                   | `numeric(24, 8)`  |                                             |
-| Exchange rates                 | `numeric(24, 12)` | Weak-currency pairs need the extra places   |
-| Interest rates and percentages | `numeric(14, 8)`  | Stored as a percentage: `3.4` means 3.4% pa |
+SQLite has five storage classes and no arbitrary-precision numeric, so the
+schema maps each kind of value to the class that keeps it exact:
 
-Drizzle returns `numeric` as a string. The engine parses those strings straight
-into `Decimal`; a value never passes through a JavaScript `number`.
+| Kind                                     | Storage               | Why                                                                   |
+| ---------------------------------------- | --------------------- | --------------------------------------------------------------------- |
+| Money, quantities, prices, rates         | `text`                | An exact decimal string. See below.                                   |
+| Calendar dates                           | `text` (`YYYY-MM-DD`) | Sorts and compares correctly as text; the engine already uses strings |
+| Instants (created/updated at)            | `integer` (epoch ms)  | Drizzle converts to and from `Date`                                   |
+| Booleans                                 | `integer` (0/1)       | Drizzle converts to and from `boolean`                                |
+| UUID keys                                | `text`                | Generated on insert with `crypto.randomUUID()`                        |
+| JSON (`metadata_json`, `sleeve_targets`) | `text`                | Drizzle serialises and parses                                         |
+
+### Why decimals are `text`
+
+A `REAL` column would round anything past 15–16 significant digits, and
+`NUMERIC` affinity would silently convert `'1234567890123456.12345678'` into a
+REAL on the way in. `TEXT` affinity stores the bytes it is given. The engine's
+`toStorage()` writes canonical decimal strings, Drizzle returns them unchanged,
+and the engine parses them straight into `Decimal`; a value never passes through
+a JavaScript `number`.
+
+The precision budget is the engine's, enforced by the Zod schemas rather than by
+a column definition: money at 8 dp, quantities at 12 dp, exchange rates at 12 dp,
+percentages at 8 dp (`3.4` means 3.4% pa).
+
+Two consequences to keep in mind:
+
+- Values round-trip exactly as written. `'100'` stays `'100'`; nothing pads it
+  to `'100.00000000'`. Compare decimals with `Decimal`, never with `===`.
+- SQL arithmetic over these columns (`sum`, `*`) needs an explicit
+  `CAST(... AS REAL)` and is a floating-point result — fine for a rollup or a
+  chart, not for anything that must reconcile to the cent. Exact totals come
+  from the engine.
 
 ## Enumerations
 
-Persisted as `text` with a `CHECK` constraint, not as a PostgreSQL enum type.
-These lists grow — new asset classes, new transaction types — and altering a
-CHECK is a one-line migration where altering an enum is not.
+Persisted as `text` with a `CHECK` constraint. These lists grow — new asset
+classes, new transaction types — and the values live in one place.
 
 The allowed values live in `src/lib/types/domain.ts` and are used to generate both
 the CHECK constraints and the Zod schemas, so they cannot drift apart.
@@ -89,8 +116,9 @@ Every table indexes `user_id`. Beyond that:
 
 Beyond the enum lists:
 
-- Currency columns must match `^[A-Z]{3}$`
-- Quantities, prices, balances, fees and taxes cannot be negative
+- Currency columns must match `[A-Z][A-Z][A-Z]` (SQLite `GLOB`; there is no regex operator)
+- Quantities, prices, balances, fees and taxes cannot be negative — checked as
+  `CAST(col AS REAL) >= 0`, which the cast cannot get wrong for a sign
 - Exchange rates must be strictly positive
 - `fiscal_year_start_month` between 1 and 12
 - `emergency_fund_months` between 1 and 36
@@ -98,14 +126,44 @@ Beyond the enum lists:
 - `target_amount` strictly positive
 
 The database enforces these independently of the application, so a bad row cannot
-arrive through any path.
+arrive through any path. Foreign keys are enforced too: D1 runs with
+`PRAGMA foreign_keys = ON`.
 
-## Commands
+## Writes and atomicity
+
+D1 has no interactive transactions — `BEGIN` is rejected — so there is no
+`db.transaction(async (tx) => …)` in which reads and writes interleave. What it
+has is `batch()`, which runs a list of prepared statements as one implicit
+transaction: every statement commits or none does.
+
+Two limits shape how writes are built (`src/lib/server/db/batch.ts`):
+
+- **100 bound parameters per statement.** A multi-row `INSERT` spends one per
+  column per row, so `insertAll()` splits rows into statements sized from the
+  table's width (a 16-column table takes 6 rows per statement).
+- **One batch is one transaction.** `insertAll()` sends all of those statements
+  as a single batch, so a constraint failure on row 4,000 rolls back rows
+  1–3,999 too.
+
+The CSV import is the consumer: it reads everything it needs first (accounts by
+name, holdings by symbol, existing signatures for duplicate detection), builds
+the complete row set, and writes it with one `insertAll()`. A partially imported
+file never survives a failure.
+
+## Migrations
+
+Drizzle writes them; wrangler applies them. Both use the same `drizzle/` folder
+(`migrations_dir` in `wrangler.jsonc`), and wrangler records what it has applied
+in the database's own `d1_migrations` table.
 
 ```bash
-pnpm db:generate     # regenerate SQL from the schema
-pnpm db:migrate      # apply pending migrations
-pnpm db:studio       # browse
-pnpm db:push         # local iteration only — never the production path
-pnpm db:seed         # development seed
+pnpm db:generate         # diff the schema, write drizzle/NNNN_<name>.sql
+pnpm db:migrate          # apply to the local database (.wrangler/state)
+pnpm db:migrate:remote   # apply to the deployed D1 database
+pnpm db:seed             # demo household into the local database
+pnpm db:reset            # delete the local database; migrate again to rebuild
 ```
+
+`drizzle-kit generate` needs no connection — it only reads the schema and
+`drizzle/meta`. There is no `push` or `studio`: D1 is a binding, not a URL, and
+`wrangler d1 execute wealthscope --local --command "select …"` is the browse tool.

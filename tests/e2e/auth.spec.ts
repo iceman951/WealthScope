@@ -48,7 +48,7 @@ test.describe('authentication', () => {
 		await page.goto('/register');
 		await page.getByLabel('Name').fill('Short Password');
 		await page.getByLabel('Email').fill(uniqueEmail('short'));
-		await page.getByLabel('Password', { exact: true }).fill('tooshort');
+		await page.getByLabel(/^Password/).fill('tooshort');
 		await page.getByLabel('Confirm password').fill('different');
 		await page.getByRole('button', { name: 'Create account' }).click();
 

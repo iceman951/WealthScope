@@ -1,5 +1,5 @@
 import { error } from '@sveltejs/kit';
-import { and, eq } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { assetNativeValue } from '$engine/net-worth';
 import { toStorage } from '$engine/money';
 import type { ImportKind } from '$lib/types/domain';
@@ -15,7 +15,9 @@ import {
 	type RejectedRow
 } from '$lib/importers/csv';
 import { IMPORT_DEFINITIONS } from '$lib/importers/definitions';
-import { withTransaction } from '../db/transaction';
+import type { DbClient } from '../db';
+import { insertAll } from '../db/batch';
+import { read } from '../db/read';
 import {
 	assets,
 	cashflowEntries,
@@ -23,6 +25,7 @@ import {
 	liabilities,
 	transactions
 } from '../db/schema';
+import { listAccounts } from '../repositories/accounts';
 import {
 	completeImportBatch,
 	createImportBatch,
@@ -36,8 +39,10 @@ import { log } from '../security/logging';
  *
  * Two passes. The preview pass validates and reports; nothing is written. The
  * commit pass re-validates on the server — the browser's preview is never trusted
- * — and writes every accepted row inside one transaction, so a failure leaves the
- * account exactly as it was.
+ * — and writes every accepted row as one atomic D1 batch, so a failure leaves the
+ * account exactly as it was. D1 has no interactive transactions, which is why
+ * each kind below reads everything it needs first and only then writes: see
+ * `insertAll` in db/batch.ts.
  *
  * CSV contents are never logged and never persisted; only counts, the file name
  * and a content hash are recorded.
@@ -142,35 +147,13 @@ export async function commitImport(
 	});
 
 	try {
-		const result = await withTransaction(async (tx) => {
-			switch (kind) {
-				case 'assets':
-					return insertAssets(
-						tx,
-						userId,
-						outcome.valid.map((r) => r.value)
-					);
-				case 'liabilities':
-					return insertLiabilities(
-						tx,
-						userId,
-						outcome.valid.map((r) => r.value)
-					);
-				case 'cashflow':
-					return insertCashflow(
-						tx,
-						userId,
-						outcome.valid.map((r) => r.value)
-					);
-				case 'transactions':
-					return insertTransactions(
-						tx,
-						userId,
-						batch.id,
-						outcome.valid.map((r) => r.value)
-					);
-			}
-		});
+		const result = await writeRows(
+			read(),
+			kind,
+			userId,
+			batch.id,
+			outcome.valid.map((r) => r.value)
+		);
 
 		await completeImportBatch(userId, batch.id, {
 			status: 'completed',
@@ -212,8 +195,27 @@ export async function commitImport(
 	}
 }
 
-type Tx = Parameters<Parameters<typeof withTransaction>[0]>[0];
 type Row = Record<string, unknown>;
+type WriteResult = { imported: number; skipped: number };
+
+function writeRows(
+	db: DbClient,
+	kind: ImportKind,
+	userId: string,
+	batchId: string,
+	rows: readonly Row[]
+): Promise<WriteResult> {
+	switch (kind) {
+		case 'assets':
+			return insertAssets(db, userId, rows);
+		case 'liabilities':
+			return insertLiabilities(db, userId, rows);
+		case 'cashflow':
+			return insertCashflow(db, userId, rows);
+		case 'transactions':
+			return insertTransactions(db, userId, batchId, rows);
+	}
+}
 
 function str(value: unknown, fallback = ''): string {
 	return value === null || value === undefined ? fallback : String(value);
@@ -223,9 +225,11 @@ function nullableStr(value: unknown): string | null {
 	return value === null || value === undefined || value === '' ? null : String(value);
 }
 
-async function insertAssets(tx: Tx, userId: string, rows: readonly Row[]) {
+async function insertAssets(db: DbClient, userId: string, rows: readonly Row[]) {
 	if (rows.length === 0) return { imported: 0, skipped: 0 };
-	await tx.insert(assets).values(
+	await insertAll(
+		db,
+		assets,
 		rows.map((row) => {
 			const quantity = str(row.quantity, '1');
 			const unitPrice = str(row.unitPrice, '0');
@@ -258,9 +262,11 @@ async function insertAssets(tx: Tx, userId: string, rows: readonly Row[]) {
 	return { imported: rows.length, skipped: 0 };
 }
 
-async function insertLiabilities(tx: Tx, userId: string, rows: readonly Row[]) {
+async function insertLiabilities(db: DbClient, userId: string, rows: readonly Row[]) {
 	if (rows.length === 0) return { imported: 0, skipped: 0 };
-	await tx.insert(liabilities).values(
+	await insertAll(
+		db,
+		liabilities,
 		rows.map((row) => ({
 			userId,
 			name: str(row.name),
@@ -277,9 +283,11 @@ async function insertLiabilities(tx: Tx, userId: string, rows: readonly Row[]) {
 	return { imported: rows.length, skipped: 0 };
 }
 
-async function insertCashflow(tx: Tx, userId: string, rows: readonly Row[]) {
+async function insertCashflow(db: DbClient, userId: string, rows: readonly Row[]) {
 	if (rows.length === 0) return { imported: 0, skipped: 0 };
-	await tx.insert(cashflowEntries).values(
+	await insertAll(
+		db,
+		cashflowEntries,
 		rows.map((row) => ({
 			userId,
 			entryType: str(row.entryType),
@@ -297,20 +305,25 @@ async function insertCashflow(tx: Tx, userId: string, rows: readonly Row[]) {
 }
 
 /**
- * Transactions need their account and holding resolved by name inside the same
- * transaction, and are checked against existing rows so a re-imported statement
- * does not duplicate a trade.
+ * Transactions need their account and holding resolved by name, and are checked
+ * against existing rows so a re-imported statement does not duplicate a trade.
+ * All three lookups happen before the single atomic write.
  */
-async function insertTransactions(tx: Tx, userId: string, batchId: string, rows: readonly Row[]) {
+async function insertTransactions(
+	db: DbClient,
+	userId: string,
+	batchId: string,
+	rows: readonly Row[]
+) {
 	if (rows.length === 0) return { imported: 0, skipped: 0 };
 
-	const accountRows = await tx
+	const accountRows = await db
 		.select({ id: financialAccounts.id, name: financialAccounts.name })
 		.from(financialAccounts)
 		.where(eq(financialAccounts.userId, userId));
 	const accountsByName = new Map(accountRows.map((a) => [a.name.toLowerCase(), a.id]));
 
-	const assetRows = await tx
+	const assetRows = await db
 		.select({ id: assets.id, symbol: assets.symbol })
 		.from(assets)
 		.where(eq(assets.userId, userId));
@@ -318,7 +331,7 @@ async function insertTransactions(tx: Tx, userId: string, batchId: string, rows:
 		assetRows.filter((a) => a.symbol).map((a) => [a.symbol!.toLowerCase(), a.id])
 	);
 
-	const existing = await tx
+	const existing = await db
 		.select({
 			accountId: transactions.accountId,
 			transactionDate: transactions.transactionDate,
@@ -370,18 +383,12 @@ async function insertTransactions(tx: Tx, userId: string, batchId: string, rows:
 		});
 	}
 
-	if (values.length > 0) await tx.insert(transactions).values(values);
+	await insertAll(db, transactions, values);
 	return { imported: values.length, skipped };
 }
 
 export async function verifyAccountsExist(userId: string): Promise<boolean> {
-	const rows = await withTransaction(async (tx) =>
-		tx
-			.select({ id: financialAccounts.id })
-			.from(financialAccounts)
-			.where(and(eq(financialAccounts.userId, userId)))
-			.limit(1)
-	);
+	const rows = await listAccounts(userId);
 	return rows.length > 0;
 }
 

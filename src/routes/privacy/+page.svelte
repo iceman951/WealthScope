@@ -7,8 +7,8 @@
 	<p>
 		WealthScope is a server-backed application. The records you enter — accounts, assets,
 		investments, transactions, liabilities, income, expenses, goals and settings — are stored in a
-		PostgreSQL database operated by the deployment you signed up to. They are not held only in your
-		browser.
+		Cloudflare D1 database operated by the deployment you signed up to. They are not held only in
+		your browser.
 	</p>
 
 	<h2>What is stored</h2>
