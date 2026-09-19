@@ -2,7 +2,7 @@ import { building, dev } from '$app/environment';
 import { redirect, type Handle, type HandleServerError } from '@sveltejs/kit';
 import { svelteKitHandler } from 'better-auth/svelte-kit';
 import { getAuth } from '$lib/server/auth';
-import { bindDatabase } from '$lib/server/db';
+import { bindDatabase, isDatabaseBound } from '$lib/server/db';
 import { ensureDevSeed } from '$lib/server/db/dev-seed';
 import { PRIVATE_CACHE_CONTROL, securityHeaders } from '$lib/server/security/headers';
 import { log, newCorrelationId, userRef } from '$lib/server/security/logging';
@@ -49,8 +49,10 @@ const handleAuth: Handle = async ({ event, resolve }) => {
 	event.locals.user = null;
 	event.locals.sessionId = null;
 
-	// Prerendering has no request context and no session to resolve.
-	if (!building) {
+	// Prerendering has no request context and no session to resolve. Neither
+	// does a prerenderable route in dev, which arrives here with no database
+	// attached (see handleDatabase) — in production it is a static file.
+	if (!building && isDatabaseBound()) {
 		try {
 			const auth = getAuth();
 			const result = await auth.api.getSession({ headers: event.request.headers });
@@ -117,19 +119,37 @@ const handleDatabase: Handle = async ({ event, resolve }) => {
 	// Prerendering `/`, `/privacy` and `/terms` runs through this chain at build
 	// time, where there is no binding and no database needed.
 	if (!building) {
-		const binding = event.platform?.env?.DB;
-		if (!binding) {
-			throw new Error(
-				'No D1 binding named "DB" on platform.env. Declare it under d1_databases in wrangler.jsonc; `vite dev` picks it up through the platform proxy.'
-			);
+		const binding = d1Binding(event.platform);
+		if (binding) {
+			bindDatabase(binding);
+			// Local development only: put the demo household into an empty database
+			// so every screen has something to render. Memoised per process.
+			if (dev) await ensureDevSeed();
 		}
-		bindDatabase(binding);
-		// Local development only: put the demo household into an empty database
-		// so every screen has something to render. Memoised per process.
-		if (dev) await ensureDevSeed();
 	}
 	return resolve(event);
 };
+
+/**
+ * The `DB` binding, or `null` on a prerenderable route.
+ *
+ * `/`, `/privacy` and `/terms` are prerendered at build time and served as
+ * static files in production, so they never have a database. In `vite dev` the
+ * adapter enforces that by handing those routes a `platform.env` whose every
+ * property throws on access — which is what the try/catch is for. Any other
+ * route without the binding is a configuration error worth failing loudly on.
+ */
+function d1Binding(platform: App.Platform | undefined): D1Database | null {
+	try {
+		const binding = platform?.env?.DB;
+		if (binding) return binding;
+	} catch {
+		return null;
+	}
+	throw new Error(
+		'No D1 binding named "DB" on platform.env. Declare it under d1_databases in wrangler.jsonc; `vite dev` picks it up through the platform proxy.'
+	);
+}
 
 const handleSecurityHeaders: Handle = async ({ event, resolve }) => {
 	const response = await resolve(event);

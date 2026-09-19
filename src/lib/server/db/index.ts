@@ -58,6 +58,11 @@ export function bindDatabase(binding: D1Database): DbClient {
 	return cached;
 }
 
+/** True once a request has attached its binding. Prerenderable routes never do. */
+export function isDatabaseBound(): boolean {
+	return cached !== null;
+}
+
 /**
  * The shared query client.
  *
