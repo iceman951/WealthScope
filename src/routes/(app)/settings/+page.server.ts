@@ -57,7 +57,7 @@ export const actions: Actions = {
 			{ event: 'settings.update', route: '/settings', user: user.id, values: parsed.values },
 			() => upsertSettings(user.id, parsed.value)
 		);
-		if (!result.ok) return fail(500, result.failure);
+		if (!result.ok) return fail(result.status, result.failure);
 		return ok('Preferences saved.');
 	},
 
@@ -77,7 +77,7 @@ export const actions: Actions = {
 			},
 			() => upsertSettings(user.id, { sleeveTargets: parsed.value })
 		);
-		if (!result.ok) return fail(500, result.failure);
+		if (!result.ok) return fail(result.status, result.failure);
 		return ok('Portfolio targets saved.');
 	},
 
@@ -94,7 +94,7 @@ export const actions: Actions = {
 					headers: event.request.headers
 				})
 		);
-		if (!result.ok) return fail(500, result.failure);
+		if (!result.ok) return fail(result.status, result.failure);
 		return ok('Profile updated.');
 	},
 
@@ -107,7 +107,7 @@ export const actions: Actions = {
 			{ event: 'rate.upsert', route: '/settings', values: parsed.values },
 			() => upsertRate(parsed.value)
 		);
-		if (!result.ok) return fail(500, result.failure);
+		if (!result.ok) return fail(result.status, result.failure);
 		return ok('Exchange rate saved.');
 	},
 
@@ -119,7 +119,7 @@ export const actions: Actions = {
 		const result = await attempt({ event: 'rate.delete', route: '/settings' }, () =>
 			deleteRate(parsed.value.id)
 		);
-		if (!result.ok) return fail(500, result.failure);
+		if (!result.ok) return fail(result.status, result.failure);
 		return ok('Exchange rate removed.');
 	}
 };

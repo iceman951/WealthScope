@@ -57,7 +57,7 @@ export const actions: Actions = {
 			{ event: 'analysis.run', route: '/analyze/overview', user: user.id },
 			() => captureSnapshot(user.id)
 		);
-		if (!result.ok) return fail(500, result.failure);
+		if (!result.ok) return fail(result.status, result.failure);
 
 		return ok('Analysis complete. A snapshot has been recorded for today.');
 	}

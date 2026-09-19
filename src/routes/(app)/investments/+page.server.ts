@@ -108,7 +108,7 @@ export const actions: Actions = {
 			{ event: 'transaction.create', route: '/investments', user: user.id, values: parsed.values },
 			() => records.createTransaction(user.id, parsed.value)
 		);
-		if (!result.ok) return fail(500, result.failure);
+		if (!result.ok) return fail(result.status, result.failure);
 		return ok('Transaction recorded.');
 	},
 
@@ -124,7 +124,7 @@ export const actions: Actions = {
 			{ event: 'transaction.update', route: '/investments', user: user.id, values: parsed.values },
 			() => records.updateTransaction(user.id, id, parsed.value)
 		);
-		if (!result.ok) return fail(500, result.failure);
+		if (!result.ok) return fail(result.status, result.failure);
 		return ok('Transaction updated.');
 	},
 
@@ -137,7 +137,7 @@ export const actions: Actions = {
 			{ event: 'transaction.delete', route: '/investments', user: user.id },
 			() => records.deleteTransaction(user.id, parsed.value.id)
 		);
-		if (!result.ok) return fail(500, result.failure);
+		if (!result.ok) return fail(result.status, result.failure);
 		return ok('Transaction removed.');
 	},
 
@@ -150,7 +150,7 @@ export const actions: Actions = {
 			{ event: 'price.record', route: '/investments', user: user.id, values: parsed.values },
 			() => records.recordPrice(user.id, parsed.value)
 		);
-		if (!result.ok) return fail(500, result.failure);
+		if (!result.ok) return fail(result.status, result.failure);
 		return ok('Price recorded. The holding has been revalued.');
 	}
 };

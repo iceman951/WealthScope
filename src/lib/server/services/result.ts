@@ -73,22 +73,35 @@ export function parseForm<S extends z.ZodType>(
 /**
  * Runs a service call inside an action.
  *
- * Deliberate `error()` and `redirect()` throws pass straight through — those are
- * the framework's control flow. Anything else is logged with a correlation id and
- * turned into one safe sentence; a driver message never reaches the browser.
+ * `redirect()` passes straight through — that is the framework's control flow.
+ * A deliberate `error(status, message)` from a service is a sentence written for
+ * the user ("this holding still has transactions"), so it comes back as a form
+ * failure with that status rather than escaping to the full-page error route:
+ * the page that submitted the form is the right place to show it. Anything
+ * else is logged with a correlation id and turned into one safe sentence; a
+ * driver message never reaches the browser.
+ *
+ * Return it with `fail(result.status, result.failure)`.
  */
 export async function attempt<T>(
 	context: { event: string; route?: string; user?: string | null; values?: Record<string, string> },
 	fn: () => Promise<T>
-): Promise<{ ok: true; value: T } | { ok: false; failure: ActionFailure }> {
+): Promise<{ ok: true; value: T } | { ok: false; status: number; failure: ActionFailure }> {
 	try {
 		return { ok: true, value: await fn() };
 	} catch (err) {
-		if (isHttpError(err) || isRedirect(err)) throw err;
+		if (isRedirect(err)) throw err;
+		if (isHttpError(err)) {
+			return {
+				ok: false,
+				status: err.status,
+				failure: formError(err.body.message, context.values ?? {})
+			};
+		}
 		const { code, message } = reportUnexpected(context.event, err, {
 			route: context.route,
 			user: context.user
 		});
-		return { ok: false, failure: formError(message, context.values ?? {}, code) };
+		return { ok: false, status: 500, failure: formError(message, context.values ?? {}, code) };
 	}
 }

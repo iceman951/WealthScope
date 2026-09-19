@@ -44,7 +44,7 @@ export const actions: Actions = {
 					defaultInflationAssumption: String(parsed.value.annualInflationPercent)
 				})
 		);
-		if (!result.ok) return fail(500, result.failure);
+		if (!result.ok) return fail(result.status, result.failure);
 
 		return ok('Assumptions saved as your defaults.');
 	}

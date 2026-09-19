@@ -65,7 +65,7 @@ export const actions: Actions = {
 			{ event: 'cashflow.create', route: '/cashflow', user: user.id, values: parsed.values },
 			() => records.createCashflowEntry(user.id, parsed.value)
 		);
-		if (!result.ok) return fail(500, result.failure);
+		if (!result.ok) return fail(result.status, result.failure);
 		return ok('Entry saved.');
 	},
 
@@ -80,7 +80,7 @@ export const actions: Actions = {
 			{ event: 'cashflow.update', route: '/cashflow', user: user.id, values: parsed.values },
 			() => records.updateCashflowEntry(user.id, id, parsed.value)
 		);
-		if (!result.ok) return fail(500, result.failure);
+		if (!result.ok) return fail(result.status, result.failure);
 		return ok('Entry updated.');
 	},
 
@@ -93,7 +93,7 @@ export const actions: Actions = {
 			{ event: 'cashflow.delete', route: '/cashflow', user: user.id },
 			() => records.deleteCashflowEntry(user.id, parsed.value.id)
 		);
-		if (!result.ok) return fail(500, result.failure);
+		if (!result.ok) return fail(result.status, result.failure);
 		return ok('Entry removed.');
 	}
 };

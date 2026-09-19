@@ -93,7 +93,7 @@ export const actions: Actions = {
 			{ event: 'liability.create', route: '/liabilities', user: user.id, values: parsed.values },
 			() => records.createLiability(user.id, parsed.value)
 		);
-		if (!result.ok) return fail(500, result.failure);
+		if (!result.ok) return fail(result.status, result.failure);
 		return ok('Liability saved.');
 	},
 
@@ -108,7 +108,7 @@ export const actions: Actions = {
 			{ event: 'liability.update', route: '/liabilities', user: user.id, values: parsed.values },
 			() => records.updateLiability(user.id, id, parsed.value)
 		);
-		if (!result.ok) return fail(500, result.failure);
+		if (!result.ok) return fail(result.status, result.failure);
 		return ok('Liability updated.');
 	},
 
@@ -121,7 +121,7 @@ export const actions: Actions = {
 			{ event: 'liability.delete', route: '/liabilities', user: user.id },
 			() => records.deleteLiability(user.id, parsed.value.id)
 		);
-		if (!result.ok) return fail(500, result.failure);
+		if (!result.ok) return fail(result.status, result.failure);
 		return ok('Liability removed.');
 	}
 };

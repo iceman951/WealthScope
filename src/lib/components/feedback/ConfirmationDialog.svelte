@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
+	import { showToast } from '$lib/stores/toast.svelte';
 	import Button from '../base/Button.svelte';
 	import Dialog from './Dialog.svelte';
 
@@ -31,10 +32,17 @@
 		{action}
 		use:enhance={() => {
 			pending = true;
-			return async ({ update }) => {
+			return async ({ result, update }) => {
 				await update();
 				pending = false;
 				onclose();
+				// The dialog is gone by the time the page could render a form
+				// error, so a refusal (a holding that still has transactions, a
+				// row that no longer exists) is voiced here instead.
+				if (result.type === 'failure') {
+					const message = (result.data as { message?: string } | undefined)?.message;
+					showToast(message ?? 'That could not be deleted.', 'error');
+				}
 			};
 		}}
 	>

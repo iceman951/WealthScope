@@ -74,7 +74,7 @@ export const actions: Actions = {
 			{ event: 'asset.create', route: '/assets', user: user.id, values: parsed.values },
 			() => records.createAsset(user.id, parsed.value)
 		);
-		if (!result.ok) return fail(500, result.failure);
+		if (!result.ok) return fail(result.status, result.failure);
 
 		return ok('Asset saved. Every metric has been recomputed.');
 	},
@@ -90,7 +90,7 @@ export const actions: Actions = {
 			{ event: 'asset.update', route: '/assets', user: user.id, values: parsed.values },
 			() => records.updateAsset(user.id, id, parsed.value)
 		);
-		if (!result.ok) return fail(500, result.failure);
+		if (!result.ok) return fail(result.status, result.failure);
 
 		return ok('Asset updated.');
 	},
@@ -103,7 +103,7 @@ export const actions: Actions = {
 		const result = await attempt({ event: 'asset.delete', route: '/assets', user: user.id }, () =>
 			records.deleteAsset(user.id, parsed.value.id)
 		);
-		if (!result.ok) return fail(500, result.failure);
+		if (!result.ok) return fail(result.status, result.failure);
 
 		return ok('Asset removed.');
 	}

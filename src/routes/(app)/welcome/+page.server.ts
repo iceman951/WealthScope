@@ -30,7 +30,7 @@ export const actions: Actions = {
 			{ event: 'onboarding.basics', route: '/welcome', user: user.id, values: parsed.values },
 			() => upsertSettings(user.id, parsed.value)
 		);
-		if (!result.ok) return fail(500, result.failure);
+		if (!result.ok) return fail(result.status, result.failure);
 
 		redirect(303, '/welcome?step=3');
 	},
@@ -41,7 +41,7 @@ export const actions: Actions = {
 			{ event: 'onboarding.finish', route: '/welcome', user: user.id },
 			() => markOnboarded(user.id)
 		);
-		if (!result.ok) return fail(500, result.failure);
+		if (!result.ok) return fail(result.status, result.failure);
 
 		const destination = String((await event.request.formData()).get('next') ?? '');
 		redirect(303, safeRedirect(destination));

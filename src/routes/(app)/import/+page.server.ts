@@ -99,7 +99,7 @@ export const actions: Actions = {
 		const result = await attempt({ event: 'import.preview', route: '/import', user: user.id }, () =>
 			previewImport(user.id, kind.data, upload.text, mapping?.success ? mapping.data : undefined)
 		);
-		if (!result.ok) return fail(500, result.failure);
+		if (!result.ok) return fail(result.status, result.failure);
 
 		return ok('Preview ready.', {
 			preview: result.value,
@@ -137,7 +137,7 @@ export const actions: Actions = {
 		const result = await attempt({ event: 'import.commit', route: '/import', user: user.id }, () =>
 			commitImport(user.id, kind.data, upload.text, mapping.data, fileName)
 		);
-		if (!result.ok) return fail(500, result.failure);
+		if (!result.ok) return fail(result.status, result.failure);
 
 		const { imported, rejected, skippedDuplicates } = result.value;
 		const parts = [`${imported} ${imported === 1 ? 'row' : 'rows'} imported`];

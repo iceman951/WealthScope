@@ -40,7 +40,7 @@ export const actions: Actions = {
 			{ event: 'account.create', route: '/accounts', user: user.id, values: parsed.values },
 			() => records.createAccount(user.id, parsed.value)
 		);
-		if (!result.ok) return fail(500, result.failure);
+		if (!result.ok) return fail(result.status, result.failure);
 		return ok('Account saved.');
 	},
 
@@ -55,7 +55,7 @@ export const actions: Actions = {
 			{ event: 'account.update', route: '/accounts', user: user.id, values: parsed.values },
 			() => records.updateAccount(user.id, id, parsed.value)
 		);
-		if (!result.ok) return fail(500, result.failure);
+		if (!result.ok) return fail(result.status, result.failure);
 		return ok('Account updated.');
 	},
 
@@ -68,7 +68,7 @@ export const actions: Actions = {
 			{ event: 'account.delete', route: '/accounts', user: user.id },
 			() => records.deleteAccount(user.id, parsed.value.id)
 		);
-		if (!result.ok) return fail(500, result.failure);
+		if (!result.ok) return fail(result.status, result.failure);
 		return ok('Account removed. Records that referenced it are now unassigned.');
 	}
 };
