@@ -36,15 +36,15 @@ export async function listAccountsWithUsage(userId: string, db: DbClient = read(
 			isActive: financialAccounts.isActive,
 			createdAt: financialAccounts.createdAt,
 			assetCount: sql<number>`(
-				select count(*)::int from ${assets}
+				select count(*) from ${assets}
 				where ${assets.accountId} = ${financialAccounts.id}
 			)`,
 			liabilityCount: sql<number>`(
-				select count(*)::int from ${liabilities}
+				select count(*) from ${liabilities}
 				where ${liabilities.accountId} = ${financialAccounts.id}
 			)`,
 			transactionCount: sql<number>`(
-				select count(*)::int from ${transactions}
+				select count(*) from ${transactions}
 				where ${transactions.accountId} = ${financialAccounts.id}
 			)`
 		})

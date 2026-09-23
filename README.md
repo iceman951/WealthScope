@@ -4,6 +4,21 @@ Personal wealth analysis. Record assets, investments, liabilities, income and ex
 
 One SvelteKit repository — frontend, server-side rendering, form actions, API endpoints, business logic, financial engine and database schema. There is no separate backend.
 
+> **POC status: Bun + SQLite + Elysia.** `/api/*` is one Elysia app mounted at
+> `src/routes/api/[...slugs]/+server.ts`; the database is a SQLite file via `bun:sqlite`,
+> migrated automatically on startup. The Neon / Cloudflare sections below are paused.
+>
+> ```bash
+> cp .env.example .env    # set BETTER_AUTH_SECRET
+> pnpm install
+> pnpm db:seed            # creates ./data/wealthscope.db + demo user
+> pnpm dev                # http://localhost:5555
+> pnpm test               # unit tests (Node)
+> TEST_DATABASE_URL=./data/test.db pnpm test:integration   # Bun
+> pnpm build && pnpm start
+> pnpm db:generate        # after a schema change
+> ```
+
 ---
 
 ## Table of contents

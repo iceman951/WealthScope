@@ -1,19 +1,18 @@
-import { getDb, type NeonDatabase } from './index';
+import { getDb, type DbClient } from './index';
 
 /**
  * Read-side helpers.
  *
- * Kept separate from ./transaction.ts so a page load never accidentally opens a
- * WebSocket session it does not need, and so repositories can be handed either
- * the HTTP client or a transaction client without knowing which they hold.
+ * Repositories take a `DbClient` defaulting to `read()`, so the same method works
+ * inside and outside `withTransaction()`.
  */
 
-export function read(): NeonDatabase {
+export function read(): DbClient {
 	return getDb();
 }
 
 /**
- * Runs independent read queries as one HTTP round trip instead of N.
+ * Runs independent read queries together.
  * Used by the dashboard, which needs six aggregates to render one screen.
  */
 export async function readAll<T extends readonly Promise<unknown>[] | []>(

@@ -17,7 +17,9 @@ export default defineConfig({
 		{ name: 'mobile', use: { ...devices['Pixel 7'] } }
 	],
 	webServer: {
-		command: 'pnpm build && pnpm exec vite preview --port 4173',
+		// bun:sqlite needs the Bun server; `vite preview` would run on Node.
+		command:
+			'pnpm build && PORT=4173 ORIGIN=http://localhost:4173 BETTER_AUTH_URL=http://localhost:4173 pnpm start',
 		port: 4173,
 		reuseExistingServer: !process.env.CI,
 		timeout: 180_000

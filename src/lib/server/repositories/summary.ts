@@ -20,18 +20,19 @@ export async function shellSummary(userId: string, db: DbClient = read()): Promi
 				(select count(*) from ${liabilities} where ${liabilities.userId} = ${userId}) +
 				(select count(*) from ${cashflowEntries} where ${cashflowEntries.userId} = ${userId}) +
 				(select count(*) from ${transactions} where ${transactions.userId} = ${userId})
-			)::int`,
-			lastUpdated: sql<string | null>`greatest(
-				(select max(${assets.updatedAt}) from ${assets} where ${assets.userId} = ${userId}),
-				(select max(${liabilities.updatedAt}) from ${liabilities} where ${liabilities.userId} = ${userId}),
-				(select max(${cashflowEntries.updatedAt}) from ${cashflowEntries} where ${cashflowEntries.userId} = ${userId}),
-				(select max(${transactions.updatedAt}) from ${transactions} where ${transactions.userId} = ${userId})
-			)::text`
+			)`,
+			// Scalar max() is NULL if any argument is, unlike PostgreSQL's greatest().
+			lastUpdated: sql<number | null>`nullif(max(
+				coalesce((select max(${assets.updatedAt}) from ${assets} where ${assets.userId} = ${userId}), 0),
+				coalesce((select max(${liabilities.updatedAt}) from ${liabilities} where ${liabilities.userId} = ${userId}), 0),
+				coalesce((select max(${cashflowEntries.updatedAt}) from ${cashflowEntries} where ${cashflowEntries.userId} = ${userId}), 0),
+				coalesce((select max(${transactions.updatedAt}) from ${transactions} where ${transactions.userId} = ${userId}), 0)
+			), 0)`
 		})
 		.from(sql`(select 1) as one`);
 
 	return {
 		recordCount: rows[0]?.recordCount ?? 0,
-		lastUpdated: rows[0]?.lastUpdated ?? null
+		lastUpdated: rows[0]?.lastUpdated ? new Date(rows[0].lastUpdated).toISOString() : null
 	};
 }

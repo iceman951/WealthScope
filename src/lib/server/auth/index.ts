@@ -9,6 +9,7 @@ import {
 	DEFAULT_RETURN_ASSUMPTION,
 	DEFAULT_TIMEZONE
 } from '$lib/types/domain';
+import type { AuthenticatedUser } from '$lib/types/session';
 import { getDb } from '../db';
 import { account, session, user, userFinancialSettings, verification } from '../db/schema';
 
@@ -33,7 +34,7 @@ function buildAuth(secret: string, baseURL: string) {
 		baseURL,
 		basePath: '/api/auth',
 		database: drizzleAdapter(db, {
-			provider: 'pg',
+			provider: 'sqlite',
 			schema: { user, session, account, verification }
 		}),
 		emailAndPassword: {
@@ -100,4 +101,25 @@ export function getAuth(): Auth {
 		cachedSecret = secret;
 	}
 	return cached;
+}
+
+/**
+ * Resolves a request's session cookie into the user. The only place a user
+ * identity enters the application; shared by hooks.server.ts and the Elysia API.
+ */
+export async function resolveUser(
+	headers: Headers
+): Promise<{ user: AuthenticatedUser; sessionId: string | null } | null> {
+	const result = await getAuth().api.getSession({ headers });
+	if (!result?.user) return null;
+	return {
+		user: {
+			id: result.user.id,
+			email: result.user.email,
+			name: result.user.name,
+			emailVerified: result.user.emailVerified,
+			image: result.user.image ?? null
+		},
+		sessionId: result.session?.id ?? null
+	};
 }

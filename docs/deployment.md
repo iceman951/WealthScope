@@ -1,5 +1,8 @@
 # Deployment
 
+> **Paused.** The app currently runs as a Bun server on SQLite (`pnpm build && pnpm start`).
+> Everything below describes the previous Cloudflare Workers + Neon target.
+
 Target: Cloudflare Workers with static assets, backed by Neon PostgreSQL.
 
 ## 1. Neon

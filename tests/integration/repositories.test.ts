@@ -108,7 +108,7 @@ suite('repositories (integration)', () => {
 				},
 				db
 			);
-			expect(updated).toBeUndefined();
+			expect(updated).toBeNull();
 
 			expect(await accountsRepo.deleteAccount(mallory.id, created.id, db)).toBe(false);
 
@@ -175,7 +175,7 @@ suite('repositories (integration)', () => {
 
 			// And the holding's own valuation is unchanged.
 			const unchanged = await assetsRepo.findAsset(alice.id, asset.id, db);
-			expect(unchanged?.unitPrice).toBe('100.00000000');
+			expect(unchanged?.unitPrice).toBe('100');
 		});
 
 		it('records a price and revalues the holding for its owner', async () => {

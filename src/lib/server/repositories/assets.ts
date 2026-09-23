@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, inArray, sql, type SQL } from 'drizzle-orm';
+import { and, asc, count, desc, eq, inArray, type SQL } from 'drizzle-orm';
 import { INVESTMENT_ASSET_TYPES, type AssetType } from '$lib/types/domain';
 import type { AssetInputPayload } from '$lib/schemas/financial';
 import type { AssetInput } from '$engine/types';
@@ -189,19 +189,6 @@ export async function recordPrice(
 	}
 
 	return rows[0];
-}
-
-/** Total market value by asset type, computed in the database. */
-export async function assetTotalsByType(userId: string, db: DbClient = read()) {
-	return db
-		.select({
-			assetType: assets.assetType,
-			currency: assets.currency,
-			total: sql<string>`sum(coalesce(${assets.manualValue}, ${assets.quantity} * ${assets.unitPrice}))`
-		})
-		.from(assets)
-		.where(eq(assets.userId, userId))
-		.groupBy(assets.assetType, assets.currency);
 }
 
 /** Maps a repository row to the engine's input shape. */

@@ -4,7 +4,9 @@ node_modules
 /build
 /.svelte-kit
 /dist
-/.wrangler
+/data
+*.db
+*.db-*
 
 .env
 .env.*

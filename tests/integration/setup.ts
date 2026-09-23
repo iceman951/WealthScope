@@ -1,29 +1,26 @@
 import 'dotenv/config';
-import { Pool } from '@neondatabase/serverless';
-import { drizzle } from 'drizzle-orm/neon-serverless';
 import { eq } from 'drizzle-orm';
 import { randomUUID } from 'node:crypto';
+import { openDb, type DbClient } from '../../src/lib/server/db/open';
 import * as schema from '../../src/lib/server/db/schema/index';
 
 /**
  * Integration-test harness.
  *
- * These tests exercise the real repositories against a real PostgreSQL database.
- * They are skipped unless TEST_DATABASE_URL is set, so `pnpm test` stays runnable
- * without infrastructure — see docs/deployment.md for how to point one at a Neon
- * branch in CI.
+ * These tests exercise the real repositories against a real SQLite file. They
+ * are skipped unless TEST_DATABASE_URL is set, and need Bun for bun:sqlite:
+ *   TEST_DATABASE_URL=./data/test.db pnpm test
  */
 
 export const TEST_DATABASE_URL = process.env.TEST_DATABASE_URL;
 export const hasDatabase = Boolean(TEST_DATABASE_URL);
 
-export type TestDb = ReturnType<typeof drizzle<typeof schema>>;
+export type TestDb = DbClient;
 
 export function createTestDb(): { db: TestDb; close: () => Promise<void> } {
 	if (!TEST_DATABASE_URL) throw new Error('TEST_DATABASE_URL is not set.');
-	const pool = new Pool({ connectionString: TEST_DATABASE_URL });
-	const db = drizzle(pool, { schema, casing: 'snake_case' });
-	return { db, close: () => pool.end() };
+	const db = openDb(TEST_DATABASE_URL);
+	return { db, close: async () => db.$client.close() };
 }
 
 export interface TestUser {

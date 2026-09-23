@@ -18,8 +18,7 @@ export default defineConfig({
 		globals: false
 	},
 	build: {
-		// Cloudflare Workers ship a single bundle; keep chunks small enough that a
-		// dashboard visit never pulls in ECharts or pdf-lib.
+		// Keep chunks small enough that a dashboard visit never pulls in ECharts or pdf-lib.
 		chunkSizeWarningLimit: 700
 	}
 });

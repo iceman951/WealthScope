@@ -1,35 +1,36 @@
-import { Pool, neonConfig } from '@neondatabase/serverless';
-import { drizzle, type NeonDatabase } from 'drizzle-orm/neon-serverless';
-import { databaseUrl } from './index';
-import * as schema from './schema';
+import { sql } from 'drizzle-orm';
+import { getDb, type DbClient } from './index';
 
 /**
  * Transaction boundary for multi-statement financial writes (CSV import,
- * cascading deletes, snapshot rebuilds).
+ * cascading deletes, snapshot rebuilds). Failure rolls the whole unit back — a
+ * partially imported CSV must never survive.
  *
- * Neon's HTTP driver cannot hold a transaction open across statements, so this
- * opens a short-lived WebSocket session, runs the callback inside BEGIN/COMMIT
- * and closes the pool. Failure rolls the whole unit back — a partially imported
- * CSV must never survive.
+ * drizzle's bun-sqlite `transaction()` is synchronous and would commit before an
+ * async callback's queries run, so BEGIN/COMMIT are issued by hand around the
+ * callback instead.
  */
 
-// Workers and Node 22+ both expose a global WebSocket; declaring it explicitly
-// stops the driver from trying to require('ws') in environments that lack it.
-if (typeof globalThis.WebSocket !== 'undefined') {
-	neonConfig.webSocketConstructor = globalThis.WebSocket;
-}
+export type TransactionClient = DbClient;
 
-export type TransactionClient = Parameters<
-	Parameters<NeonDatabase<typeof schema>['transaction']>[0]
->[0];
+// ponytail: one connection, so transactions are serialised through a global
+// lock and a query from another request can still interleave inside one. Fine for
+// a single-process POC; use a per-transaction connection or a real server DB later.
+let queue: Promise<unknown> = Promise.resolve();
 
-export async function withTransaction<T>(fn: (tx: TransactionClient) => Promise<T>): Promise<T> {
-	const pool = new Pool({ connectionString: databaseUrl() });
-	try {
-		const db = drizzle(pool, { schema, casing: 'snake_case' });
-		return await db.transaction(async (tx) => fn(tx));
-	} finally {
-		// Always release the socket; a leaked pool keeps the isolate alive.
-		await pool.end().catch(() => undefined);
-	}
+export function withTransaction<T>(fn: (tx: TransactionClient) => Promise<T>): Promise<T> {
+	const run = queue.then(async () => {
+		const db = getDb();
+		db.run(sql`BEGIN IMMEDIATE`);
+		try {
+			const result = await fn(db);
+			db.run(sql`COMMIT`);
+			return result;
+		} catch (err) {
+			db.run(sql`ROLLBACK`);
+			throw err;
+		}
+	});
+	queue = run.catch(() => undefined);
+	return run;
 }

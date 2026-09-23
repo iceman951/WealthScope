@@ -10,10 +10,9 @@
  */
 
 import 'dotenv/config';
-import { Pool } from '@neondatabase/serverless';
-import { drizzle } from 'drizzle-orm/neon-serverless';
 import { eq } from 'drizzle-orm';
 import { scryptSync, randomBytes, randomUUID } from 'node:crypto';
+import { openDb } from '../src/lib/server/db/open';
 import * as schema from '../src/lib/server/db/schema/index';
 
 const DEMO_EMAIL = 'demo@wealthscope.example';
@@ -55,8 +54,7 @@ async function main() {
 	assertNotProduction(url);
 
 	const reset = process.argv.includes('--reset');
-	const pool = new Pool({ connectionString: url });
-	const db = drizzle(pool, { schema, casing: 'snake_case' });
+	const db = openDb(url);
 
 	try {
 		const existing = await db
@@ -633,7 +631,7 @@ async function main() {
 		console.log(`  password: ${DEMO_PASSWORD}`);
 		console.log('\nEvery figure above is fictional demo data.');
 	} finally {
-		await pool.end();
+		db.$client.close();
 	}
 }
 

@@ -1,6 +1,8 @@
 # Database
 
-Neon Serverless PostgreSQL, Drizzle ORM, SQL migrations committed to `drizzle/`.
+SQLite via `bun:sqlite` (POC), Drizzle ORM, SQL migrations committed to `drizzle/` and applied
+on startup by `src/lib/server/db/open.ts`. Financial values are TEXT columns holding exact decimal
+strings; timestamps are integer milliseconds; booleans are 0/1.
 
 ## Tables
 

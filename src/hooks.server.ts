@@ -1,7 +1,6 @@
 import { building, dev } from '$app/environment';
 import { redirect, type Handle, type HandleServerError } from '@sveltejs/kit';
-import { svelteKitHandler } from 'better-auth/svelte-kit';
-import { getAuth } from '$lib/server/auth';
+import { resolveUser } from '$lib/server/auth';
 import { PRIVATE_CACHE_CONTROL, securityHeaders } from '$lib/server/security/headers';
 import { log, newCorrelationId, userRef } from '$lib/server/security/logging';
 
@@ -50,17 +49,10 @@ const handleAuth: Handle = async ({ event, resolve }) => {
 	// Prerendering has no request context and no session to resolve.
 	if (!building) {
 		try {
-			const auth = getAuth();
-			const result = await auth.api.getSession({ headers: event.request.headers });
-			if (result?.user) {
-				event.locals.user = {
-					id: result.user.id,
-					email: result.user.email,
-					name: result.user.name,
-					emailVerified: result.user.emailVerified,
-					image: result.user.image ?? null
-				};
-				event.locals.sessionId = result.session?.id ?? null;
+			const resolved = await resolveUser(event.request.headers);
+			if (resolved) {
+				event.locals.user = resolved.user;
+				event.locals.sessionId = resolved.sessionId;
 			}
 		} catch (err) {
 			// A failed session lookup means "not signed in", never "signed in as
@@ -107,22 +99,10 @@ const handleSecurityHeaders: Handle = async ({ event, resolve }) => {
 	return response;
 };
 
-/** Better Auth owns everything under /api/auth. */
-const handleBetterAuth: Handle = async ({ event, resolve }) => {
-	if (building || !event.url.pathname.startsWith('/api/auth')) {
-		return resolve(event);
-	}
-	return svelteKitHandler({ event, resolve, auth: getAuth(), building });
-};
-
 export const handle: Handle = async (input) => {
 	return handleSecurityHeaders({
 		event: input.event,
-		resolve: (event) =>
-			handleAuth({
-				event,
-				resolve: (inner) => handleBetterAuth({ event: inner, resolve: input.resolve })
-			})
+		resolve: (event) => handleAuth({ event, resolve: input.resolve })
 	});
 };
 

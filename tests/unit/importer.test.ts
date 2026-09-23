@@ -1,4 +1,8 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+
+// transactionSignature is pure, but its module's import chain reaches bun:sqlite,
+// which Node (vitest's runtime) does not have. Nothing here touches the database.
+vi.mock('../../src/lib/server/db/read', () => ({}));
 import {
 	applyMapping,
 	contentHash,
